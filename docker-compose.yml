@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fpe-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: fpe_admin
+      POSTGRES_PASSWORD: fpe_password
+      POSTGRES_DB: fpe_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+
+volumes:
+  pgdata:
