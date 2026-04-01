@@ -17,6 +17,10 @@ import financialProjectionsRouter from './routes/v1/financial-projections';
 import unitEconomicsRouter from './routes/v1/unit-economics';
 import kpiProjectionsRouter from './routes/v1/kpi-projections';
 import driverExplainabilityRouter from './routes/v1/driver-explainability';
+import fundingParametersRouter from './routes/v1/funding-parameters';
+import rolloutPlansRouter from './routes/v1/rollout-plans';
+import riskScenariosRouter from './routes/v1/risk-scenarios';
+import simulationRunsRouter from './routes/v1/simulation-runs';
 // import './jobs'; // Boot BullMQ worker
 
 dotenv.config();
@@ -52,6 +56,12 @@ app.use('/api/v1/kpi-projections', kpiProjectionsRouter);
 
 // Phase 3 Routes (Sprint 3.2)
 app.use('/api/v1/driver-explainability', driverExplainabilityRouter);
+app.use('/api/v1/funding-parameters', fundingParametersRouter);
+app.use('/api/v1/rollout-plans', rolloutPlansRouter);
+
+// Phase 4 Routes (Sprint 4.1-4.4)
+app.use('/api/v1/risk-scenarios', riskScenariosRouter);
+app.use('/api/v1/simulation-runs', simulationRunsRouter);
 
 // Health check
 app.get('/api/v1/health', (req, res) => {

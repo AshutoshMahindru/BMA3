@@ -70,8 +70,8 @@ export const fetchCashflow = (scenarioId?: string) =>
 export const fetchKpiProjections = () =>
   fetchAPI('/kpi-projections');
 
-export const fetchUnitEconomics = () =>
-  fetchAPI('/unit-economics');
+export const fetchUnitEconomics = (scenarioId?: string) =>
+  fetchAPI(`/unit-economics${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
 
 export const fetchCapexPlans = (scenarioId?: string) =>
   fetchAPI(`/capex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
@@ -82,10 +82,88 @@ export const fetchWorkingCapital = (scenarioId?: string) =>
 export const fetchDriverExplainability = (scenarioId: string) =>
   fetchAPI(`/driver-explainability?scenario_id=${scenarioId}`);
 
+export const fetchPricePlans = (scenarioId?: string) =>
+  fetchAPI(`/price-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
 export const upsertDemandDrivers = (drivers: any[]) =>
   fetchAPI('/demand-drivers/upsert', {
     method: 'POST',
     body: JSON.stringify(drivers),
+  });
+
+export const upsertPricePlans = (plans: any) =>
+  fetchAPI('/price-plans', {
+    method: 'POST',
+    body: JSON.stringify(plans),
+  });
+
+export const fetchLaborModels = (scenarioId?: string) =>
+  fetchAPI(`/labor-models${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertLaborModels = (models: any) =>
+  fetchAPI('/labor-models', {
+    method: 'POST',
+    body: JSON.stringify(models),
+  });
+
+export const fetchMarketingPlans = (scenarioId?: string) =>
+  fetchAPI(`/marketing-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertMarketingPlans = (plans: any) =>
+  fetchAPI('/marketing-plans', {
+    method: 'POST',
+    body: JSON.stringify(plans),
+  });
+
+export const upsertCapexPlans = (plans: any) =>
+  fetchAPI('/capex-plans', {
+    method: 'POST',
+    body: JSON.stringify(plans),
+  });
+
+export const fetchWorkingCapitalPolicies = (scenarioId?: string) =>
+  fetchAPI(`/working-capital-policies${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertWorkingCapitalPolicies = (policies: any) =>
+  fetchAPI('/working-capital-policies', {
+    method: 'POST',
+    body: JSON.stringify(policies),
+  });
+
+export const fetchOpexPlans = (scenarioId?: string) =>
+  fetchAPI(`/opex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertOpexPlans = (plans: any) =>
+  fetchAPI('/opex-plans', {
+    method: 'POST',
+    body: JSON.stringify(plans),
+  });
+
+export const fetchUnitCostProfiles = (scenarioId?: string) =>
+  fetchAPI(`/unit-cost-profiles${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertUnitCostProfiles = (profiles: any) =>
+  fetchAPI('/unit-cost-profiles', {
+    method: 'POST',
+    body: JSON.stringify(profiles),
+  });
+
+export const fetchFundingParameters = (scenarioId?: string) =>
+  fetchAPI(`/funding-parameters${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertFundingParameters = (params: any) =>
+  fetchAPI('/funding-parameters', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+
+export const fetchRolloutPlans = (scenarioId?: string) =>
+  fetchAPI(`/rollout-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const upsertRolloutPlans = (plans: any) =>
+  fetchAPI('/rollout-plans', {
+    method: 'POST',
+    body: JSON.stringify(plans),
   });
 
 export const triggerCompute = (payload: {
@@ -101,6 +179,29 @@ export const triggerCompute = (payload: {
 
 export const pollJob = (jobId: string) =>
   fetchAPI(`/financial-projections/jobs/${jobId}`);
+
+export const fetchRiskScenarios = (scenarioId: string) =>
+  fetchAPI(`/risk-scenarios?scenario_id=${scenarioId}`);
+
+export const upsertRiskScenarios = (payload: { scenario_id: string; risks: any[] }) =>
+  fetchAPI('/risk-scenarios/upsert', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const triggerSimulation = (payload: {
+  scenario_id: string;
+  simulator_type: string;
+  iterations?: number;
+  input_params?: any;
+}) =>
+  fetchAPI('/simulation-runs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+export const fetchSimulationResults = (runId: string) =>
+  fetchAPI(`/simulation-runs/${runId}/results`);
 
 export const checkHealth = () =>
   fetchAPI<{ status: string; message: string }>('/health');

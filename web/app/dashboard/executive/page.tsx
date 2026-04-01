@@ -29,8 +29,14 @@ const alerts = ACTIVE_ALERTS.map(a => ({
 
 export default function ExecutiveCockpit() {
   const ctx = usePlanningContext();
+  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+
   /* ── API wiring: try live API, fall back to static data ── */
-  const { data: monthlyRevenueEbitda, source, lastFetched } = useApiData<{month: string; revenue: number; ebitda: number}[]>(() => fetchPnl(), [...EXECUTIVE_MONTHLY_REVENUE_EBITDA]);
+  const { data: monthlyRevenueEbitda, source, lastFetched } = useApiData<{month: string; revenue: number; ebitda: number}[]>(
+    () => fetchPnl(scenarioId), 
+    [...EXECUTIVE_MONTHLY_REVENUE_EBITDA],
+    [scenarioId]
+  );
   const scenarioSnapshot = SCENARIO_SNAPSHOT;
   const platformMix = PLATFORM_MIX;
 

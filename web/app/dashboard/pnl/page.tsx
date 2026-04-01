@@ -22,10 +22,14 @@ const ebitdaBridge = EBITDA_BRIDGE;
 const maxBridge = Math.max(...ebitdaBridge.map(b => Math.abs(b.value)));
 
 export default function PnlConsole() {
+  const ctx = usePlanningContext();
+  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+
   /* ── API wiring: try live API, fall back to static data ── */
   const { data: pnlData, source, lastFetched } = useApiData<PnLRow[]>(
-    () => fetchPnl(),
-    PNL_DATA
+    () => fetchPnl(scenarioId),
+    PNL_DATA,
+    [scenarioId]
   );
 
   const fmt = (val: number) =>
@@ -36,7 +40,6 @@ export default function PnlConsole() {
   // Summary KPIs
   const annualizedRevenue = pnlData[2].fy; // Net Revenue FY
   const ebitdaMarginLast = pnlData[11].values[11]; // Dec EBITDA margin
-  const ctx = usePlanningContext();
 
   return (
     <div className="flex-1 flex flex-col">

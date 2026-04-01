@@ -9,32 +9,25 @@
 import { MapPin, Calendar, CheckCircle2, Clock, AlertTriangle, Download, Printer } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import { exportCSV, exportPDF } from '@/lib/export';
-
-const markets = [
-  { name: 'JLT North', city: 'Dubai', status: 'Live', launchQ: 'Q1 2024', orders: '4,350/mo', revenue: 'AED 270K', margin: '42%', statusColor: 'bg-green-100 text-green-700' },
-  { name: 'Marina', city: 'Dubai', status: 'Live', launchQ: 'Q2 2024', orders: '3,800/mo', revenue: 'AED 232K', margin: '39%', statusColor: 'bg-green-100 text-green-700' },
-  { name: 'Downtown', city: 'Dubai', status: 'Launching', launchQ: 'Q1 2025', orders: '— (projected)', revenue: 'AED 180K (F)', margin: '35% (F)', statusColor: 'bg-blue-100 text-blue-700' },
-  { name: 'JBR', city: 'Dubai', status: 'Launching', launchQ: 'Q2 2025', orders: '— (projected)', revenue: 'AED 155K (F)', margin: '33% (F)', statusColor: 'bg-blue-100 text-blue-700' },
-  { name: 'Business Bay', city: 'Dubai', status: 'Planned', launchQ: 'Q4 2025', orders: '—', revenue: 'AED 140K (F)', margin: '30% (F)', statusColor: 'bg-amber-100 text-amber-700' },
-  { name: 'Al Reem Island', city: 'Abu Dhabi', status: 'Planned', launchQ: 'Q1 2026', orders: '—', revenue: 'AED 120K (F)', margin: '28% (F)', statusColor: 'bg-amber-100 text-amber-700' },
-  { name: 'Al Nahda', city: 'Sharjah', status: 'Pipeline', launchQ: 'Q3 2026', orders: '—', revenue: 'TBD', margin: 'TBD', statusColor: 'bg-gray-100 text-gray-600' },
-  { name: 'Al Ain Central', city: 'Al Ain', status: 'Pipeline', launchQ: 'Q1 2027', orders: '—', revenue: 'TBD', margin: 'TBD', statusColor: 'bg-gray-100 text-gray-600' },
-];
-
-const quarters = ['Q1 24', 'Q2 24', 'Q3 24', 'Q4 24', 'Q1 25', 'Q2 25', 'Q3 25', 'Q4 25', 'Q1 26', 'Q2 26', 'Q3 26', 'Q4 26'];
-const ganttData = [
-  { kitchen: 'JLT North', start: 0, duration: 12, color: '#1A7A4A' },
-  { kitchen: 'Marina', start: 1, duration: 11, color: '#1A7A4A' },
-  { kitchen: 'Downtown', start: 4, duration: 8, color: '#2563eb' },
-  { kitchen: 'JBR', start: 5, duration: 7, color: '#2563eb' },
-  { kitchen: 'Business Bay', start: 7, duration: 5, color: '#C47A1E' },
-  { kitchen: 'Al Reem Island', start: 8, duration: 4, color: '#C47A1E' },
-  { kitchen: 'Al Nahda', start: 10, duration: 2, color: '#94a3b8' },
-  { kitchen: 'Al Ain Central', start: 12, duration: 0, color: '#94a3b8' },
-];
+import { fetchRolloutPlans } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
+import { ROLLOUT_FALLBACK, QUARTERS, type RolloutPlanData } from '@/lib/data/markets';
+import DataFreshness from '@/components/data-freshness';
 
 export default function MarketRolloutPlanner() {
   const ctx = usePlanningContext();
+  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+
+  const { data: rolloutData, source, lastFetched } = useApiData<RolloutPlanData>(
+    () => fetchRolloutPlans(scenarioId),
+    ROLLOUT_FALLBACK,
+    [scenarioId]
+  );
+
+  const markets = rolloutData.markets;
+  const ganttData = rolloutData.gantt;
+  const quarters = QUARTERS;
+
   return (
     <div className="flex-1 flex flex-col">
       <div className="px-6 pt-6 pb-4 flex items-center justify-between flex-wrap gap-3">
@@ -43,7 +36,10 @@ export default function MarketRolloutPlanner() {
             <MapPin className="w-5 h-5 text-[#1E5B9C]" />
             Market Rollout Planner
           </h1>
-          <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Kitchen Expansion Pipeline & Timeline</p>
+          <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
+            {ctx.scopeLabel} — Kitchen Expansion Pipeline & Timeline
+            <DataFreshness source={source} lastFetched={lastFetched} />
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => { const h=['Kitchen','City','Status','Launch Q','Orders','Revenue','Margin']; const r=markets.map(m=>[m.name,m.city,m.status,m.launchQ,m.orders,m.revenue,m.margin]); exportCSV('Market_Rollout',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>

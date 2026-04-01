@@ -22,7 +22,13 @@ const paybackCurve = PAYBACK_CURVE;
 
 export default function UnitEconomicsConsole() {
   const ctx = usePlanningContext();
-  const { data: waterfall, source, lastFetched } = useApiData<WaterfallRow[]>(() => fetchUnitEconomics(), UNIT_WATERFALL);
+  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+
+  const { data: waterfall, source, lastFetched } = useApiData<WaterfallRow[]>(
+    () => fetchUnitEconomics(scenarioId),
+    UNIT_WATERFALL,
+    [scenarioId]
+  );
   const maxWaterfall = Math.max(...waterfall.map(w => Math.abs(w.value)));
   const fmtAed = (v: number) => `AED ${Math.abs(v).toFixed(1)}`;
 

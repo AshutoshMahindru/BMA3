@@ -1,152 +1,282 @@
 "use client";
 
-/* S19: RISK MANAGEMENT DASHBOARD — 5×5 Heatmap + Top-10 Register */
-
-import { Shield, AlertTriangle, Download, Printer } from 'lucide-react';
+import { useMemo } from 'react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { exportCSV, exportPDF } from '@/lib/export';
+import { ShieldAlert, AlertTriangle, CheckCircle2, MoreHorizontal, Info, Target, TrendingUp, Download, Printer } from 'lucide-react';
+import DataFreshness from '@/components/data-freshness';
+import { fetchRiskScenarios } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
+import { exportCSV } from '@/lib/export';
 
-const impactLabels = ['Negligible', 'Minor', 'Moderate', 'Major', 'Catastrophic'];
-const probLabels = ['Remote', 'Unlikely', 'Possible', 'Likely', 'Almost Certain'];
+/* ── Types ── */
+interface RiskItem {
+  risk_id: string;
+  name: string;
+  category: string;
+  mitigation_plan: string;
+  probability_pct: number;
+  financial_impact_estimate: number;
+  base_likelihood: string;
+  base_impact: string;
+  scenario_risk_id?: string;
+}
 
-const riskCells: Record<string, { count: number; ids: string[] }> = {
-  '4-4': { count: 2, ids: ['R01','R02'] }, '4-3': { count: 1, ids: ['R03'] },
-  '3-4': { count: 1, ids: ['R04'] }, '3-3': { count: 2, ids: ['R05','R06'] },
-  '2-4': { count: 1, ids: ['R07'] }, '2-3': { count: 1, ids: ['R08'] },
-  '1-2': { count: 1, ids: ['R09'] }, '0-1': { count: 1, ids: ['R10'] },
-};
+/* ── Constants ── */
+const PROB_LABELS = ['Very High', 'High', 'Medium', 'Low', 'Very Low'];
+const IMPACT_LABELS = ['Negligible', 'Minor', 'Moderate', 'Major', 'Critical'];
 
-const heatColor = (p: number, i: number) => {
-  const score = (p + 1) * (i + 1);
-  if (score >= 16) return 'bg-red-600 text-white';
-  if (score >= 10) return 'bg-orange-500 text-white';
-  if (score >= 5) return 'bg-amber-400 text-gray-900';
-  return 'bg-green-400 text-gray-900';
-};
-
-const riskRegister = [
-  { id: 'R01', name: 'Cash runway < 6 months', category: 'Financial', probability: 'Likely', impact: 'Catastrophic', score: 20, owner: 'CFO', mitigation: 'Accelerate Series A timeline', status: 'Active' },
-  { id: 'R02', name: 'Key kitchen staff turnover spike', category: 'Operational', probability: 'Likely', impact: 'Major', score: 16, owner: 'HR', mitigation: 'Retention bonus program', status: 'Active' },
-  { id: 'R03', name: 'Platform commission increase', category: 'Commercial', probability: 'Likely', impact: 'Moderate', score: 12, owner: 'Partnerships', mitigation: 'Diversify to own-channel', status: 'Monitoring' },
-  { id: 'R04', name: 'Food inflation > 10%', category: 'Cost', probability: 'Possible', impact: 'Major', score: 12, owner: 'Procurement', mitigation: 'Supplier hedging contracts', status: 'Active' },
-  { id: 'R05', name: 'Downtown launch delay > 4 weeks', category: 'Execution', probability: 'Possible', impact: 'Moderate', score: 9, owner: 'Projects', mitigation: 'Parallel workstream acceleration', status: 'Monitoring' },
-  { id: 'R06', name: 'Competitor price war', category: 'Market', probability: 'Possible', impact: 'Moderate', score: 9, owner: 'Strategy', mitigation: 'Value proposition differentiation', status: 'Watching' },
-  { id: 'R07', name: 'Regulatory license delay', category: 'Compliance', probability: 'Unlikely', impact: 'Major', score: 8, owner: 'Legal', mitigation: 'Pre-file applications', status: 'Monitoring' },
-  { id: 'R08', name: 'Technology platform outage', category: 'Technology', probability: 'Unlikely', impact: 'Moderate', score: 6, owner: 'CTO', mitigation: 'DR/BCP procedures', status: 'Watching' },
-  { id: 'R09', name: 'Customer data breach', category: 'Cybersecurity', probability: 'Remote', impact: 'Catastrophic', score: 5, owner: 'CTO', mitigation: 'SOC2 certification in progress', status: 'Watching' },
-  { id: 'R10', name: 'VAT policy change', category: 'Regulatory', probability: 'Remote', impact: 'Minor', score: 2, owner: 'Finance', mitigation: 'Monitor UAE tax framework', status: 'Watching' },
+const FALLBACK_RISKS: RiskItem[] = [
+  { risk_id: 'R1', name: 'Platform Fee Hike (>25%)', category: 'Platform', mitigation_plan: 'Channel diversification', probability_pct: 0.75, financial_impact_estimate: 450000, base_likelihood: 'high', base_impact: 'major' },
+  { risk_id: 'R2', name: 'Demand Slump (Competitor)', category: 'Market', mitigation_plan: 'Loyalty program', probability_pct: 0.45, financial_impact_estimate: 380000, base_likelihood: 'medium', base_impact: 'major' },
+  { risk_id: 'R3', name: 'Food Cost Inflation', category: 'Supply Chain', mitigation_plan: 'Fixed contracts', probability_pct: 0.82, financial_impact_estimate: 250000, base_likelihood: 'high', base_impact: 'moderate' },
+  { risk_id: 'R4', name: 'Series A Funding Delay', category: 'Funding', mitigation_plan: 'Bridge debt', probability_pct: 0.20, financial_impact_estimate: 1200000, base_likelihood: 'low', base_impact: 'critical' },
 ];
 
 export default function RiskDashboard() {
   const ctx = usePlanningContext();
+  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+
+  const { data: risks, source, lastFetched } = useApiData<RiskItem[]>(
+    () => fetchRiskScenarios(scenarioId),
+    FALLBACK_RISKS,
+    [scenarioId]
+  );
+
+  const fmt = (val: number) => 
+    new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
+
+  /* ── Heatmap Calculation ── */
+  const heatmapData = useMemo(() => {
+    const grid = Array(5).fill(0).map(() => Array(5).fill(0).map(() => [] as RiskItem[]));
+    
+    risks.forEach(risk => {
+      // Map probability % to index (0-4: 0.8+=VH, 0.6+=H, 0.4+=M, 0.2+=L, else VL)
+      let pIdx = 4;
+      if (risk.probability_pct >= 0.8) pIdx = 0;
+      else if (risk.probability_pct >= 0.6) pIdx = 1;
+      else if (risk.probability_pct >= 0.4) pIdx = 2;
+      else if (risk.probability_pct >= 0.2) pIdx = 3;
+
+      // Map impact AED to index (0-4: 1M+=C, 400K+=Major, 150K+=Mod, 50K+=Minor, else Neg)
+      let iIdx = 0;
+      const imp = risk.financial_impact_estimate;
+      if (imp >= 1000000) iIdx = 4;
+      else if (imp >= 400000) iIdx = 3;
+      else if (imp >= 150000) iIdx = 2;
+      else if (imp >= 50000) iIdx = 1;
+
+      grid[pIdx][iIdx].push(risk);
+    });
+    return grid;
+  }, [risks]);
+
   return (
-    <div className="flex-1 flex flex-col">
-      <div className="px-6 pt-6 pb-4 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-            <Shield className="w-5 h-5 text-[#1E5B9C]" /> Risk Management Dashboard
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Enterprise Risk Assessment — {ctx.scenarioLabel}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => { const h=['ID','Risk','Category','Probability','Impact','Score','Owner','Mitigation','Status']; const r=riskRegister.map(k=>[k.id,k.name,k.category,k.probability,k.impact,k.score,k.owner,k.mitigation,k.status]); exportCSV('Risk_Register',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>
-          <button onClick={() => { const h=['ID','Risk','Category','Probability','Impact','Score','Owner','Mitigation','Status']; const r=riskRegister.map(k=>[k.id,k.name,k.category,k.probability,k.impact,k.score,k.owner,k.mitigation,k.status]); exportPDF('Risk Register',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"><Printer className="w-3.5 h-3.5" /> PDF</button>
+    <div className="flex-1 flex flex-col bg-[#F9FAFB]">
+      {/* Header */}
+      <div className="px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <ShieldAlert className="w-5 h-5 text-[#1E5B9C]" />
+              Risk & Uncertainty Dashboard
+            </h1>
+            <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
+              {ctx.scopeLabel} — {ctx.scenarioLabel} 
+              <DataFreshness source={source} lastFetched={lastFetched} />
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+               onClick={() => exportCSV(`FPE_Risk_Register_${ctx.scenarioLabel}`, ['ID', 'Risk', 'Category', 'Prob %', 'Impact AED'], risks.map(r => [r.risk_id, r.name, r.category, String(r.probability_pct), String(r.financial_impact_estimate)]))}
+               className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 shadow-sm transition"
+            >
+              <Download className="w-3.5 h-3.5" /> Export Register
+            </button>
+            <button className="flex items-center gap-1.5 text-[11px] font-bold text-white bg-[#1B2A4A] px-4 py-2 rounded-lg hover:bg-[#263B5E] shadow-sm transition">
+              <TrendingUp className="w-3.5 h-3.5" /> Run Simulation
+            </button>
+          </div>
         </div>
       </div>
-      <div className="px-6 pb-8 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 5×5 Heatmap */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-[#1E5B9C]" /> 5×5 Risk Heatmap
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <th className="w-24 text-[9px] font-bold text-gray-400 uppercase pb-2">Prob / Impact →</th>
-                    {impactLabels.map(l => <th key={l} className="text-center text-[8px] font-bold text-gray-400 uppercase pb-2 px-1">{l}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...probLabels].reverse().map((prob, pIdx) => {
-                    const actualP = 4 - pIdx;
+
+      <div className="px-6 pb-8 grid grid-cols-12 gap-6">
+        
+        {/* Risk Heatmap (Left Column) */}
+        <div className="col-span-12 lg:col-span-8 space-y-6">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                <Target className="w-4 h-4 text-[#1E5B9C]" />
+                5 × 5 Risk Heatmap (Probability × Financial Impact)
+              </h3>
+              <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-tight text-gray-400">
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500"/> High Criticality</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Moderate</div>
+                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Acceptable</div>
+              </div>
+            </div>
+            
+            <div className="p-8">
+              <div className="grid grid-cols-[80px_repeat(5,1fr)] grid-rows-[repeat(5,130px)_40px] gap-2">
+                {/* Probability Y-Axis Labels */}
+                {PROB_LABELS.map((label, i) => (
+                  <div key={label} className="col-start-1 flex items-center justify-end pr-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider text-right line-clamp-2">
+                    {label}
+                  </div>
+                ))}
+
+                {/* Heatmap Cells */}
+                {heatmapData.map((row, pIdx) => (
+                  row.map((cellRisks, iIdx) => {
+                    // Criticality color logic: High (top right), Low (bottom left)
+                    const score = (5 - pIdx) * (iIdx + 1);
+                    const bgColor = score >= 15 ? 'bg-red-50 border-red-200' : 
+                                   score >= 8 ? 'bg-amber-50 border-amber-200' : 
+                                   'bg-emerald-50 border-emerald-100';
+                    
                     return (
-                      <tr key={prob}>
-                        <td className="text-[9px] font-bold text-gray-500 pr-2 py-1 text-right">{prob}</td>
-                        {impactLabels.map((_, iIdx) => {
-                          const key = `${actualP}-${iIdx}`;
-                          const cell = riskCells[key];
-                          return (
-                            <td key={iIdx} className="p-0.5">
-                              <div className={`w-full h-12 rounded flex items-center justify-center text-[10px] font-bold ${heatColor(actualP, iIdx)}`}>
-                                {cell ? <span>{cell.count} risk{cell.count > 1 ? 's' : ''}</span> : ''}
-                              </div>
-                            </td>
-                          );
-                        })}
-                      </tr>
+                      <div key={`${pIdx}-${iIdx}`} className={`rounded-lg border-2 border-dashed flex flex-col gap-1 p-2 overflow-y-auto transition hover:shadow-md ${bgColor}`}>
+                         {cellRisks.map(r => (
+                           <div key={r.risk_id} className={`px-2 py-1.5 rounded border text-[9px] font-bold shadow-sm ${
+                             score >= 15 ? 'bg-red-600 text-white border-red-700' :
+                             score >= 8 ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                             'bg-emerald-600 text-white border-emerald-700'
+                           }`}>
+                             {r.name}
+                           </div>
+                         ))}
+                      </div>
                     );
-                  })}
-                </tbody>
-              </table>
+                  })
+                ))}
+
+                {/* Impact X-Axis Labels */}
+                <div className="col-start-1" /> {/* Spacer */}
+                {IMPACT_LABELS.map(label => (
+                  <div key={label} className="flex items-center justify-center pt-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    {label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Summary Cards */}
-          <div className="space-y-4">
-            {[
-              { label: 'Critical Risks (Score ≥16)', count: 2, color: 'border-l-red-600 bg-red-50' },
-              { label: 'High Risks (Score 10-15)', count: 2, color: 'border-l-orange-500 bg-orange-50' },
-              { label: 'Medium Risks (Score 5-9)', count: 4, color: 'border-l-amber-400 bg-amber-50' },
-              { label: 'Low Risks (Score <5)', count: 2, color: 'border-l-green-500 bg-green-50' },
-            ].map(b => (
-              <div key={b.label} className={`border-l-4 ${b.color} rounded-lg p-4 border border-gray-200`}>
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-gray-700">{b.label}</p>
-                  <p className="text-2xl font-extrabold text-gray-900">{b.count}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Risk Register */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Top-10 Risk Register</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+          {/* Risk Register Table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                Consolidated Risk Register
+              </h3>
+            </div>
+            <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-[#D6E4F7]">
-                  {['ID', 'Risk Description', 'Category', 'Probability', 'Impact', 'Score', 'Owner', 'Mitigation', 'Status'].map(h => (
-                    <th key={h} className="px-3 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+                <tr className="bg-[#1B2A4A] text-white">
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider">Risk / ID</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider">Category</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-right">Prob %</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider text-right">Impact (AED)</th>
+                  <th className="px-5 py-3 font-bold uppercase tracking-wider">Mitigation Status</th>
+                  <th className="px-5 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {riskRegister.map((r, i) => (
-                  <tr key={i} className={`hover:bg-blue-50/30 transition ${i % 2 === 1 ? 'bg-[#F4F5F7]' : ''}`}>
-                    <td className="px-3 py-2.5 font-mono font-bold text-gray-500">{r.id}</td>
-                    <td className="px-3 py-2.5 font-semibold text-gray-800 max-w-[200px]">{r.name}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.category}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.probability}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.impact}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${r.score >= 16 ? 'bg-red-600 text-white' : r.score >= 10 ? 'bg-orange-500 text-white' : r.score >= 5 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{r.score}</span>
-                    </td>
-                    <td className="px-3 py-2.5 text-gray-600">{r.owner}</td>
-                    <td className="px-3 py-2.5 text-gray-600 max-w-[180px]">{r.mitigation}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.status === 'Active' ? 'bg-red-100 text-red-700' : r.status === 'Monitoring' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
-                    </td>
-                  </tr>
-                ))}
+                {risks.map((r, i) => {
+                  const score = r.probability_pct * r.financial_impact_estimate;
+                  const severity = score > 500000 ? 'Critical' : score > 200000 ? 'Major' : 'Moderate';
+                  const color = severity === 'Critical' ? 'text-red-600 bg-red-50' : severity === 'Major' ? 'text-amber-600 bg-amber-50' : 'text-blue-600 bg-blue-50';
+
+                  return (
+                    <tr key={i} className="hover:bg-gray-50/50 transition cursor-pointer">
+                      <td className="px-5 py-4">
+                        <p className="font-bold text-gray-900">{r.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono mt-0.5">{r.risk_id}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 text-[10px] font-bold uppercase">
+                          {r.category}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono font-bold text-gray-700">
+                        {(r.probability_pct * 100).toFixed(0)}%
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono font-bold text-gray-700">
+                        AED {fmt(r.financial_impact_estimate)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${color}`}>
+                            {severity === 'Critical' ? <AlertTriangle className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+                            {r.mitigation_plan}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        <MoreHorizontal className="w-4 h-4 text-gray-400" />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
+
+        {/* Intelligence Sidebar (Right Column) */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+          <div className="bg-[#1B2A4A] rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
+             <ShieldAlert className="absolute top-[-10px] right-[-10px] w-24 h-24 text-white/5" />
+             <h4 className="text-xs font-bold uppercase tracking-widest text-[#4A90E2] mb-1">Impact Summary</h4>
+             <p className="text-2xl font-bold">AED {fmt(risks.reduce((a, b) => a + (b.probability_pct * b.financial_impact_estimate), 0))}K</p>
+             <p className="text-[10px] text-white/60 mt-1 uppercase font-bold tracking-tight">Probabilistic Value at Risk (VaR)</p>
+             
+             <div className="mt-8 space-y-4">
+                <div className="bg-white/10 rounded-lg p-4 border border-white/10 hover:bg-white/15 transition cursor-pointer">
+                   <div className="flex justify-between items-start mb-2">
+                      <span className="text-[10px] font-bold uppercase text-[#4A90E2]">Primary Threat</span>
+                      <span className="text-[10px] font-bold bg-red-500/20 text-red-300 px-2 py-0.5 rounded">High Probability</span>
+                   </div>
+                   <p className="text-xs font-bold leading-relaxed">{risks[0].name}</p>
+                   <p className="text-[9px] text-white/50 mt-1">Impact estimated at AED {fmt(risks[0].financial_impact_estimate)}K</p>
+                </div>
+                
+                <div className="bg-white/10 rounded-lg p-4 border border-white/10 hover:bg-white/15 transition cursor-pointer">
+                   <div className="flex justify-between items-start mb-2">
+                      <span className="text-[10px] font-bold uppercase text-[#4A90E2]">Mitigation Progress</span>
+                      <span className="text-[10px] font-bold text-emerald-400">72% Coverage</span>
+                   </div>
+                   <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                      <div className="bg-emerald-500 h-full" style={{ width: '72%' }} />
+                   </div>
+                   <p className="text-[9px] text-white/50 mt-2">18 of 25 active risks mapped to specific mitigation plans.</p>
+                </div>
+             </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+             <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Risk Velocity</h4>
+             <div className="space-y-4">
+                {[
+                  { label: 'Regulatory', speed: 'Low', color: 'bg-emerald-500' },
+                  { label: 'Platform Fees', speed: 'High', color: 'bg-red-500' },
+                  { label: 'Supply Chain', speed: 'Medium', color: 'bg-amber-500' },
+                ].map(v => (
+                  <div key={v.label}>
+                    <div className="flex justify-between items-center mb-1.5">
+                       <span className="text-xs font-bold text-gray-700">{v.label}</span>
+                       <span className="text-[10px] font-bold text-gray-400 uppercase">{v.speed} Velocity</span>
+                    </div>
+                    <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                       <div className={`${v.color} h-full`} style={{ width: v.speed === 'High' ? '90%' : v.speed === 'Medium' ? '50%' : '20%' }} />
+                    </div>
+                  </div>
+                ))}
+             </div>
+             <p className="text-[9px] text-gray-400 mt-6 leading-relaxed italic border-t border-gray-50 pt-4">
+                * Risk Velocity measures the speed at which a risk can materialize after its primary trigger is detected.
+             </p>
+          </div>
+        </div>
+
       </div>
     </div>
   );
