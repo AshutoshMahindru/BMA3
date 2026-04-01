@@ -111,7 +111,7 @@ export default function PnlConsole() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              Monthly P&L Statement (AED '000s)
+              Monthly P&L Statement (AED &apos;000s)
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -176,7 +176,7 @@ export default function PnlConsole() {
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-4 h-4 text-[#1E5B9C]" />
             <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              EBITDA Bridge — Year-over-Year Drivers (AED '000s)
+              EBITDA Bridge — Year-over-Year Drivers (AED &apos;000s)
             </h3>
           </div>
           <div className="space-y-2.5">

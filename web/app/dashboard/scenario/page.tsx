@@ -118,7 +118,7 @@ export default function ScenarioComparisonConsole() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              3-Year P&L Comparison (AED '000s)
+              3-Year P&L Comparison (AED &apos;000s)
             </h3>
           </div>
           <div className="overflow-x-auto">
@@ -168,7 +168,7 @@ export default function ScenarioComparisonConsole() {
         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
           <h3 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-[#1E5B9C]" />
-            EBITDA Sensitivity — Tornado Chart (AED '000s Variance from Base)
+            EBITDA Sensitivity — Tornado Chart (AED &apos;000s Variance from Base)
           </h3>
           <p className="text-[11px] text-gray-400 mb-4">Shows EBITDA impact when each driver is stressed ±20% from Base Case assumptions</p>
           <div className="space-y-3">

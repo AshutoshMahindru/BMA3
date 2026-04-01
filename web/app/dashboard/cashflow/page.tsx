@@ -102,7 +102,7 @@ export default function CashflowConsole() {
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
             <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              Quarterly Cash Flow Statement (AED '000s)
+              Quarterly Cash Flow Statement (AED &apos;000s)
             </h3>
           </div>
           <div className="overflow-x-auto">

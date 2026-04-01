@@ -390,7 +390,7 @@ export default function AssumptionsManager() {
         }
       }, 400);
     }
-  }, [handleSaveDraft, router]);
+  }, [handleSaveDraft, router, ctx]);
 
   return (
     <div className="flex-1 flex flex-col">
