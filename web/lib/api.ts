@@ -5,7 +5,7 @@
    - Callers use: const data = await fetchAPI('/pnl') ?? fallbackData;
    ══════════════════════════════════════════════════════════════════════ */
 
-const API_BASE = 'http://localhost:4000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 const TENANT_ID = 'tttttttt-0000-0000-0000-000000000001';
 const TIMEOUT_MS = 3000;
 
