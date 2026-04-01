@@ -3,6 +3,7 @@
 import { Banknote, TrendingDown, TrendingUp, Clock, DollarSign, Download, Printer } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import { PORTFOLIO_KPIS } from '@/lib/data/kpis';
+import { CASH_FLOW_MONTHLY, FUNDING_EVENTS, BURN_RATE_MONTHLY } from '@/lib/data/cashflow';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
 
@@ -16,30 +17,9 @@ const kpis = [
   { label: 'Debt Outstanding', value: 'AED 450K', delta: '2 Facilities Active', positive: true },
 ];
 
-const cashFlowMonthly = [
-  { month: 'Jan', opening: 2800, opCF: 62, capex: -30, funding: 0, closing: 2832 },
-  { month: 'Feb', opening: 2832, opCF: 68, capex: -35, funding: 0, closing: 2865 },
-  { month: 'Mar', opening: 2865, opCF: 75, capex: -40, funding: 0, closing: 2900 },
-  { month: 'Apr', opening: 2900, opCF: 82, capex: -120, funding: 0, closing: 2862 },
-  { month: 'May', opening: 2862, opCF: 78, capex: -45, funding: 0, closing: 2895 },
-  { month: 'Jun', opening: 2895, opCF: 85, capex: -35, funding: 0, closing: 2945 },
-  { month: 'Jul', opening: 2945, opCF: 92, capex: -30, funding: 0, closing: 3007 },
-  { month: 'Aug', opening: 3007, opCF: 98, capex: -25, funding: 0, closing: 3080 },
-  { month: 'Sep', opening: 3080, opCF: 90, capex: -35, funding: 500, closing: 3635 },
-  { month: 'Oct', opening: 3635, opCF: 102, capex: -30, funding: 0, closing: 3707 },
-  { month: 'Nov', opening: 3707, opCF: 110, capex: -25, funding: 0, closing: 3792 },
-  { month: 'Dec', opening: 3792, opCF: 118, capex: -30, funding: 0, closing: 3880 },
-];
-
-const fundingEvents = [
-  { event: 'Seed Round', date: 'May 2024', amount: 'AED 2.5M', type: 'Equity', status: 'Completed', statusColor: 'bg-green-100 text-green-700' },
-  { event: 'Working Capital Facility', date: 'Jan 2025', amount: 'AED 300K', type: 'Debt', status: 'Active', statusColor: 'bg-blue-100 text-blue-700' },
-  { event: 'Equipment Financing', date: 'Mar 2025', amount: 'AED 150K', type: 'Lease', status: 'Active', statusColor: 'bg-blue-100 text-blue-700' },
-  { event: 'Series A', date: 'Q3 2025 (Target)', amount: 'AED 8.0M', type: 'Equity', status: 'Pipeline', statusColor: 'bg-amber-100 text-amber-700' },
-];
-
-/* Burn Rate Trend data */
-const burnRateMonthly = [185, 176, 172, 195, 180, 175, 168, 162, 170, 158, 150, 145];
+const cashFlowMonthly = CASH_FLOW_MONTHLY;
+const fundingEvents = FUNDING_EVENTS;
+const burnRateMonthly = [...BURN_RATE_MONTHLY];
 const maxBurn = Math.max(...burnRateMonthly);
 
 export default function CashFundingConsole() {

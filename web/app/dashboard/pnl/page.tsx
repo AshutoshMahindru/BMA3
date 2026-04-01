@@ -11,38 +11,12 @@ import { usePlanningContext } from '@/lib/planning-context';
 import { DollarSign, TrendingUp, TrendingDown, BarChart3, Download, Printer } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
+import { PNL_DATA, PNL_MONTHS, EBITDA_BRIDGE } from '@/lib/data/pnl';
 
-/* ── Monthly P&L Data (12 months) ───────────────────────────────────── */
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-type PnLRow = { label: string; values: number[]; fy: number; indent?: boolean; bold?: boolean; highlight?: 'ebitda' | 'subtotal'; pctRow?: boolean; negative?: boolean; separator?: boolean };
-
-const pnlData: PnLRow[] = [
-  { label: 'Gross Revenue', values: [260, 275, 290, 305, 320, 335, 350, 365, 380, 395, 410, 430], fy: 4115 },
-  { label: 'Less: Discounts & Promos', values: [20, 22, 21, 24, 25, 26, 27, 28, 30, 31, 32, 34], fy: 320, indent: true, negative: true },
-  { label: 'Net Revenue', values: [240, 253, 269, 281, 295, 309, 323, 337, 350, 364, 378, 396], fy: 3795, bold: true, highlight: 'subtotal' },
-  { label: 'Cost of Goods Sold', values: [65, 68, 70, 73, 76, 79, 82, 85, 88, 91, 94, 98], fy: 969, indent: true, negative: true },
-  { label: 'Gross Profit', values: [175, 185, 199, 208, 219, 230, 241, 252, 262, 273, 284, 298], fy: 2826, bold: true, highlight: 'subtotal' },
-  { label: 'Gross Margin %', values: [72.9, 73.1, 74.0, 74.0, 74.2, 74.4, 74.6, 74.8, 74.9, 75.0, 75.1, 75.3], fy: 74.5, pctRow: true },
-  { label: 'Kitchen Labor', values: [45, 45, 46, 47, 48, 48, 49, 49, 50, 50, 51, 52], fy: 580, indent: true, negative: true },
-  { label: 'Facility Rent & Utilities', values: [15, 15, 15, 15, 18, 18, 18, 18, 18, 18, 18, 18], fy: 204, indent: true, negative: true },
-  { label: 'Marketing & Acquisition', values: [20, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], fy: 295, indent: true, negative: true },
-  { label: 'General & Admin', values: [12, 12.5, 13, 13.5, 14, 14.5, 15, 15, 15.5, 16, 16.5, 17], fy: 174.5, indent: true, negative: true },
-  { label: 'EBITDA', values: [83, 92.5, 104, 110.5, 116, 125.5, 134, 144, 151.5, 161, 169.5, 181], fy: 1572.5, bold: true, highlight: 'ebitda' },
-  { label: 'EBITDA Margin %', values: [34.6, 36.6, 38.7, 39.3, 39.3, 40.6, 41.5, 42.7, 43.3, 44.2, 44.8, 45.7], fy: 41.4, pctRow: true },
-  { label: 'Depreciation & Amortization', values: [8, 8, 8, 8, 10, 10, 10, 10, 10, 10, 10, 10], fy: 112, indent: true, negative: true },
-  { label: 'Net Income', values: [68, 77, 88, 94.5, 98, 107.5, 116, 126, 133.5, 143, 151.5, 163], fy: 1365, bold: true, highlight: 'subtotal' },
-];
-
-/* ── EBITDA Bridge Waterfall ─────────────────────────────────────────── */
-const ebitdaBridge = [
-  { label: 'Revenue Growth', value: 420, positive: true },
-  { label: 'Gross Margin Improvement', value: 85, positive: true },
-  { label: 'Cost Optimization', value: 35, positive: true },
-  { label: 'Labor Cost Increase', value: -65, positive: false },
-  { label: 'Rent Expansion', value: -42, positive: false },
-  { label: 'Marketing Increase', value: -38, positive: false },
-];
+/* ── Aliases for backward compatibility ── */
+const months = PNL_MONTHS;
+const pnlData = PNL_DATA;
+const ebitdaBridge = EBITDA_BRIDGE;
 const maxBridge = Math.max(...ebitdaBridge.map(b => Math.abs(b.value)));
 
 export default function PnlConsole() {

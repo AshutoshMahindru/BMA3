@@ -3,6 +3,7 @@
 import { TrendingUp, Download, Printer } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import { PORTFOLIO_KPIS } from '@/lib/data/kpis';
+import { INVESTMENT_LADDER, ORDERS_RANGE, ASP_RANGE, SENSITIVITY_MATRIX, CAP_TABLE } from '@/lib/data/capital';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
 
@@ -16,25 +17,11 @@ const kpis = [
   { label: 'Hurdle Rate', value: '15%', delta: 'Cleared ✓', positive: true },
 ];
 
-const investmentLadder = [
-  { kitchen: 'JLT North', capex: 350, irr: '35%', payback: '14 mo', npv: '1,420', status: 'Live', statusColor: 'bg-green-100 text-green-700' },
-  { kitchen: 'Marina', capex: 340, irr: '28%', payback: '16 mo', npv: '1,180', status: 'Live', statusColor: 'bg-green-100 text-green-700' },
-  { kitchen: 'Downtown', capex: 380, irr: '22%', payback: '20 mo', npv: '890', status: 'Planned', statusColor: 'bg-amber-100 text-amber-700' },
-  { kitchen: 'JBR', capex: 320, irr: '18%', payback: '22 mo', npv: '520', status: 'Pipeline', statusColor: 'bg-blue-100 text-blue-700' },
-  { kitchen: 'Business Bay', capex: 360, irr: '15%', payback: '24 mo', npv: '340', status: 'Pipeline', statusColor: 'bg-blue-100 text-blue-700' },
-];
-
-/* 5×5 Return Sensitivity Matrix: Orders/Day (rows) × ASP (columns) */
-const ordersRange = [100, 120, 145, 170, 200];
-const aspRange = [48, 55, 62, 70, 78];
-// Returns are IRR estimates based on volume × price interaction
-const sensitivityMatrix = [
-  [  5,  10,  15,  18,  22],
-  [ 10,  16,  22,  26,  30],
-  [ 15,  22,  28,  34,  40],
-  [ 20,  28,  35,  42,  48],
-  [ 25,  34,  42,  50,  58],
-];
+const investmentLadder = INVESTMENT_LADDER;
+const ordersRange = ORDERS_RANGE;
+const aspRange = ASP_RANGE;
+const sensitivityMatrix = SENSITIVITY_MATRIX;
+const capTable = CAP_TABLE;
 
 const cellColor = (v: number) => {
   if (v >= 35) return 'bg-[#1A7A4A] text-white';
@@ -43,13 +30,6 @@ const cellColor = (v: number) => {
   if (v >= 10) return 'bg-orange-100 text-orange-800';
   return 'bg-red-100 text-red-800';
 };
-
-const capTable = [
-  { round: 'Founders', shares: '5,000,000', pct: '62.5%', value: 'AED 7.5M' },
-  { round: 'Seed Investors', shares: '2,000,000', pct: '25.0%', value: 'AED 3.0M' },
-  { round: 'ESOP Pool', shares: '1,000,000', pct: '12.5%', value: 'AED 1.5M' },
-  { round: 'Series A (Proj.)', shares: '2,400,000', pct: '23.1% (diluted)', value: 'AED 8.0M' },
-];
 
 export default function CapitalStrategy() {
   const ctx = usePlanningContext();

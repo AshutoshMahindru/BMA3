@@ -3,6 +3,7 @@
 import { AlertTriangle, Info, AlertCircle, Download, Printer } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import { PORTFOLIO_KPIS, MONTHLY_REVENUE, ACTIVE_ALERTS } from '@/lib/data/kpis';
+import { EXECUTIVE_MONTHLY_REVENUE_EBITDA, SCENARIO_SNAPSHOT, PLATFORM_MIX, CF_WATERFALL_BARS } from '@/lib/data/pnl';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
 
@@ -17,34 +18,9 @@ const kpis = [
   { label: 'Portfolio IRR', value: `${PORTFOLIO_KPIS.portfolioIrr}%`, delta: '▲ 3% vs Plan', positive: true, sub: 'Blended Return' },
 ];
 
-const monthlyRevenueEbitda = [
-  { month: 'Jan', revenue: 280, ebitda: 42 },
-  { month: 'Feb', revenue: 310, ebitda: 48 },
-  { month: 'Mar', revenue: 340, ebitda: 55 },
-  { month: 'Apr', revenue: 360, ebitda: 62 },
-  { month: 'May', revenue: 355, ebitda: 58 },
-  { month: 'Jun', revenue: 370, ebitda: 65 },
-  { month: 'Jul', revenue: 385, ebitda: 72 },
-  { month: 'Aug', revenue: 400, ebitda: 78 },
-  { month: 'Sep', revenue: 390, ebitda: 70 },
-  { month: 'Oct', revenue: 410, ebitda: 82 },
-  { month: 'Nov', revenue: 430, ebitda: 90 },
-  { month: 'Dec', revenue: 450, ebitda: 98 },
-];
-
-const scenarioSnapshot = [
-  { scenario: 'Base Case', revenue: '12.5M', ebitda: '2.1M', irr: '28%', payback: '18 mo', badge: 'bg-blue-100 text-blue-700' },
-  { scenario: 'Bull Case', revenue: '18.2M', ebitda: '4.8M', irr: '42%', payback: '12 mo', badge: 'bg-green-100 text-green-700' },
-  { scenario: 'Bear Case', revenue: '8.1M', ebitda: '0.4M', irr: '12%', payback: '28 mo', badge: 'bg-amber-100 text-amber-700' },
-  { scenario: 'Stress Test', revenue: '6.5M', ebitda: '-0.3M', irr: '-5%', payback: 'N/A', badge: 'bg-red-100 text-red-700' },
-];
-
-const platformMix = [
-  { name: 'Talabat', pct: 45, color: '#f97316' },
-  { name: 'Deliveroo', pct: 25, color: '#06b6d4' },
-  { name: 'Careem Food', pct: 18, color: '#8b5cf6' },
-  { name: 'Direct / Own App', pct: 12, color: '#16a34a' },
-];
+const monthlyRevenueEbitda = EXECUTIVE_MONTHLY_REVENUE_EBITDA;
+const scenarioSnapshot = SCENARIO_SNAPSHOT;
+const platformMix = PLATFORM_MIX;
 
 const alerts = ACTIVE_ALERTS.map(a => ({
   type: a.level,
