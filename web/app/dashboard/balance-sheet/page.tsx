@@ -11,14 +11,14 @@ import { usePlanningContext } from '@/lib/planning-context';
 import { Building2, TrendingUp, TrendingDown, CheckCircle2, Download, Printer } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
-import { BS_DATA, FINANCIAL_RATIOS } from '@/lib/data/balance-sheet';
-
-/* ── Aliases for backward compatibility ── */
-const bsData = BS_DATA;
-const ratios = FINANCIAL_RATIOS;
+import { BS_DATA, FINANCIAL_RATIOS, type BSRow } from '@/lib/data/balance-sheet';
+import { fetchBalanceSheet } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
 
 export default function BalanceSheetConsole() {
   const ctx = usePlanningContext();
+  const { data: bsData, source, lastFetched } = useApiData<BSRow[]>(() => fetchBalanceSheet(), BS_DATA);
+  const ratios = FINANCIAL_RATIOS;
   const fmt = (v: number) => v === 0 ? '' : v.toLocaleString();
   const change = (d24: number, d25: number) => {
     if (d24 === 0 && d25 === 0) return { val: '', pct: '', positive: true };
@@ -39,7 +39,7 @@ export default function BalanceSheetConsole() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.scopeLabel} — {ctx.scenarioLabel} — Dec 2024 vs Dec 2025F
-            <DataFreshness />
+            <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>
         <div className="flex items-center gap-2">

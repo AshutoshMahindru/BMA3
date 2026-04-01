@@ -11,17 +11,19 @@ import { usePlanningContext } from '@/lib/planning-context';
 import { Calculator, TrendingUp, TrendingDown, ArrowDown, Download, Printer } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import { PORTFOLIO_KPIS } from '@/lib/data/kpis';
-import { UNIT_WATERFALL, KITCHEN_RANKING, PAYBACK_CURVE } from '@/lib/data/unit-economics';
+import { UNIT_WATERFALL, KITCHEN_RANKING, PAYBACK_CURVE, type WaterfallRow } from '@/lib/data/unit-economics';
 import DataFreshness from '@/components/data-freshness';
+import { fetchUnitEconomics } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
 
-/* ── Aliases for backward compatibility ── */
-const waterfall = UNIT_WATERFALL;
+/* ── Static fallback references ── */
 const kitchenRanking = KITCHEN_RANKING;
 const paybackCurve = PAYBACK_CURVE;
-const maxWaterfall = Math.max(...waterfall.map(w => Math.abs(w.value)));
 
 export default function UnitEconomicsConsole() {
   const ctx = usePlanningContext();
+  const { data: waterfall, source, lastFetched } = useApiData<WaterfallRow[]>(() => fetchUnitEconomics(), UNIT_WATERFALL);
+  const maxWaterfall = Math.max(...waterfall.map(w => Math.abs(w.value)));
   const fmtAed = (v: number) => `AED ${Math.abs(v).toFixed(1)}`;
 
   return (
@@ -36,7 +38,7 @@ export default function UnitEconomicsConsole() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.scopeLabel} — {ctx.scenarioLabel} — Per-Order Breakdown
-            <DataFreshness />
+            <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>
         <div className="flex items-center gap-2">

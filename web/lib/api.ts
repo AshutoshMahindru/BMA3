@@ -61,11 +61,23 @@ export const fetchDemandDrivers = (scenarioId: string) =>
 export const fetchPnl = (scenarioId?: string) =>
   fetchAPI(`/financial-projections/pnl${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
 
+export const fetchBalanceSheet = (scenarioId?: string) =>
+  fetchAPI(`/financial-projections/balance-sheet${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const fetchCashflow = (scenarioId?: string) =>
+  fetchAPI(`/financial-projections/cashflow${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
 export const fetchKpiProjections = () =>
   fetchAPI('/kpi-projections');
 
 export const fetchUnitEconomics = () =>
   fetchAPI('/unit-economics');
+
+export const fetchCapexPlans = (scenarioId?: string) =>
+  fetchAPI(`/capex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
+
+export const fetchWorkingCapital = (scenarioId?: string) =>
+  fetchAPI(`/working-capital-policies${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
 
 export const fetchDriverExplainability = (scenarioId: string) =>
   fetchAPI(`/driver-explainability?scenario_id=${scenarioId}`);
@@ -92,3 +104,4 @@ export const pollJob = (jobId: string) =>
 
 export const checkHealth = () =>
   fetchAPI<{ status: string; message: string }>('/health');
+

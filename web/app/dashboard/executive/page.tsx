@@ -3,9 +3,11 @@
 import { AlertTriangle, Info, AlertCircle, Download, Printer } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import { PORTFOLIO_KPIS, MONTHLY_REVENUE, ACTIVE_ALERTS } from '@/lib/data/kpis';
-import { EXECUTIVE_MONTHLY_REVENUE_EBITDA, SCENARIO_SNAPSHOT, PLATFORM_MIX, CF_WATERFALL_BARS } from '@/lib/data/pnl';
+import { EXECUTIVE_MONTHLY_REVENUE_EBITDA, SCENARIO_SNAPSHOT, PLATFORM_MIX, CF_WATERFALL_BARS, type MonthlyRevenueEbitda } from '@/lib/data/pnl';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
+import { fetchKpiProjections, fetchPnl } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
 
 /* ══════════════════════ S02: Executive Planning Cockpit ══════════════════════ */
 
@@ -18,10 +20,6 @@ const kpis = [
   { label: 'Portfolio IRR', value: `${PORTFOLIO_KPIS.portfolioIrr}%`, delta: '▲ 3% vs Plan', positive: true, sub: 'Blended Return' },
 ];
 
-const monthlyRevenueEbitda = EXECUTIVE_MONTHLY_REVENUE_EBITDA;
-const scenarioSnapshot = SCENARIO_SNAPSHOT;
-const platformMix = PLATFORM_MIX;
-
 const alerts = ACTIVE_ALERTS.map(a => ({
   type: a.level,
   text: a.message,
@@ -31,6 +29,10 @@ const alerts = ACTIVE_ALERTS.map(a => ({
 
 export default function ExecutiveCockpit() {
   const ctx = usePlanningContext();
+  /* ── API wiring: try live API, fall back to static data ── */
+  const { data: monthlyRevenueEbitda, source, lastFetched } = useApiData<{month: string; revenue: number; ebitda: number}[]>(() => fetchPnl(), [...EXECUTIVE_MONTHLY_REVENUE_EBITDA]);
+  const scenarioSnapshot = SCENARIO_SNAPSHOT;
+  const platformMix = PLATFORM_MIX;
 
   return (
     <div className="flex-1 flex flex-col">
@@ -39,7 +41,7 @@ export default function ExecutiveCockpit() {
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Executive Planning Cockpit</h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.scopeLabel} — {ctx.timePeriodLabel} — {ctx.scenarioLabel}
-            <DataFreshness />
+            <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>
         <div className="flex items-center gap-2">

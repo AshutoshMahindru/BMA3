@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from 'react';
 import { usePlanningContext } from '@/lib/planning-context';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -11,15 +12,22 @@ import { usePlanningContext } from '@/lib/planning-context';
 import { DollarSign, TrendingUp, TrendingDown, BarChart3, Download, Printer } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
-import { PNL_DATA, PNL_MONTHS, EBITDA_BRIDGE } from '@/lib/data/pnl';
+import { PNL_DATA, PNL_MONTHS, EBITDA_BRIDGE, type PnLRow } from '@/lib/data/pnl';
+import { fetchPnl } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
 
-/* ── Aliases for backward compatibility ── */
+/* ── Static fallback data ── */
 const months = PNL_MONTHS;
-const pnlData = PNL_DATA;
 const ebitdaBridge = EBITDA_BRIDGE;
 const maxBridge = Math.max(...ebitdaBridge.map(b => Math.abs(b.value)));
 
 export default function PnlConsole() {
+  /* ── API wiring: try live API, fall back to static data ── */
+  const { data: pnlData, source, lastFetched } = useApiData<PnLRow[]>(
+    () => fetchPnl(),
+    PNL_DATA
+  );
+
   const fmt = (val: number) =>
     new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
 
@@ -43,7 +51,7 @@ export default function PnlConsole() {
             </h1>
              <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
               {ctx.scopeLabel} — {ctx.scenarioLabel} — {ctx.timePeriodLabel}
-              <DataFreshness />
+              <DataFreshness source={source} lastFetched={lastFetched} />
             </p>
           </div>
           <div className="flex items-center gap-2">

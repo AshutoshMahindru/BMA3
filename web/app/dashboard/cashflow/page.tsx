@@ -11,16 +11,18 @@ import { usePlanningContext } from '@/lib/planning-context';
 import { Banknote, TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Download, Printer } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
-import { CASHFLOW_KPIS, CF_QUARTERLY_DATA, FCF_MONTHLY } from '@/lib/data/cashflow';
+import { CASHFLOW_KPIS, CF_QUARTERLY_DATA, FCF_MONTHLY, type CFRow } from '@/lib/data/cashflow';
+import { fetchCashflow } from '@/lib/api';
+import { useApiData } from '@/lib/use-api-data';
 
-/* ── Aliases for backward compatibility ── */
+/* ── Static fallback ── */
 const kpis = CASHFLOW_KPIS;
-const cfData = CF_QUARTERLY_DATA;
 const fcfMonthly = FCF_MONTHLY;
 const maxFCF = Math.max(...fcfMonthly.map(m => Math.abs(m.fcf)));
 
 export default function CashflowConsole() {
   const ctx = usePlanningContext();
+  const { data: cfData, source, lastFetched } = useApiData<CFRow[]>(() => fetchCashflow(), CF_QUARTERLY_DATA);
   const fmt = (v: number) => {
     if (v === 0 && cfData.find(r => r.section)) return '';
     const neg = v < 0;
@@ -39,7 +41,7 @@ export default function CashflowConsole() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.scopeLabel} — {ctx.scenarioLabel} — {ctx.timePeriodLabel}
-            <DataFreshness />
+            <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>
         <div className="flex items-center gap-2">
