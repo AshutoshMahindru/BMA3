@@ -30,3 +30,9 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# PRD / Spec documents (kept locally, not in git)
+PRD/
+
+# NPM cache
+.npm-cache/
