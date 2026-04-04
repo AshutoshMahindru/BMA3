@@ -127,12 +127,14 @@ jobs:
         with:
           node-version: 20
 
-      - name: Start compose runtime
-        run: docker compose up -d postgres redis api worker
-
       - name: Install API dependencies
         working-directory: api
-        run: npm ci
+        run: |
+          rm -rf node_modules
+          npm ci
+
+      - name: Start compose runtime
+        run: docker compose up -d postgres redis api worker
 
       - name: Wait for API health
         run: |
