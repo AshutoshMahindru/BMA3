@@ -1,36 +1,15 @@
 "use client";
 
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import {
-  Settings2, Save, Play, Loader2, AlertCircle,
+  Settings2, Save, Play, AlertCircle,
   TrendingUp, TrendingDown, CheckCircle2, Clock, User, Shield,
-  Plus, Trash2, Copy, Wifi, WifiOff,
+  Plus, Trash2, Copy,
 } from 'lucide-react';
-import { 
-  upsertDemandDrivers, 
-  fetchDemandDrivers,
-  fetchWorkingCapitalPolicies,
-  upsertWorkingCapitalPolicies,
-  fetchPricePlans,
-  upsertPricePlans,
-  fetchLaborModels,
-  upsertLaborModels,
-  fetchMarketingPlans,
-  upsertMarketingPlans,
-  fetchCapexPlans,
-  upsertCapexPlans,
-  fetchFundingParameters,
-  upsertFundingParameters,
-  fetchRolloutPlans,
-  upsertUnitCostProfiles,
-  triggerCompute, 
-  pollJob, 
-  checkHealth 
-} from '@/lib/api';
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { usePlanningContext } from '@/lib/planning-context';
+import { getAssumptionsSets } from '@/lib/api-client';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 import 'ag-grid-community/styles/ag-grid.css';
@@ -39,19 +18,41 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 /* ══════════════════════════════════════════════════════════════════════════
    S06-S09: ASSUMPTIONS MANAGER — 8-Tab Editable Grid + Info Bar
    Each tab has its own AG Grid with editable columns.
-   Save Draft → persists locally. Run Engine → upserts to API + computes.
+   Pre-refactor stabilization mode: local editing only until canonical
+   assumption bindings and compute orchestration are migrated.
    ══════════════════════════════════════════════════════════════════════ */
 
 /* ── Assumption Set Info Bar ─────────────────────────────────────────── */
-const setInfo = {
-  setId: 'AS-2025-03',
-  version: 'v4 (Draft)',
-  owner: 'Commercial Team',
-  confidence: 76,
-  confidenceLabel: 'Medium',
-  lastModified: '29 Mar 2026',
-  approvalStatus: 'Pending CFO',
+interface AssumptionPanelInfo {
+  setId: string;
+  version: string;
+  owner: string;
+  confidence: number;
+  confidenceLabel: string;
+  lastModified: string;
+  approvalStatus: string;
+}
+
+const defaultSetInfo: AssumptionPanelInfo = {
+  setId: 'Preview only',
+  version: 'Canonical migration pending',
+  owner: 'Pre-refactor shell',
+  confidence: 0,
+  confidenceLabel: 'Preview',
+  lastModified: 'Local session only',
+  approvalStatus: 'Preview only',
 };
+
+function formatPanelDate(value: string | null | undefined) {
+  if (!value) return 'Local session only';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Local session only';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
 
 /* ── 8-Tab definitions with column schemas & seed data ────────────── */
 const subTabs = [
@@ -236,182 +237,13 @@ const fmtSens = (v: number) => (v >= 0 ? '+' : '') + new Intl.NumberFormat('en-A
 
 /* ══════════════════════════════════════════════════════════════════════ */
 export default function AssumptionsManager() {
-  const router = useRouter();
   const ctx = usePlanningContext();
   const gridRef = useRef<AgGridReact>(null);
   const [activeTab, setActiveTab] = useState('demand');
   const [isSaving, setIsSaving] = useState(false);
-  const [isComputing, setIsComputing] = useState(false);
-  const [jobProgress, setJobProgress] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ tone: 'warning' | 'error'; text: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
-  const [apiStatus, setApiStatus] = useState<'checking'|'live'|'offline'>('checking');
-  const [isLoading, setIsLoading] = useState(false);
-
-  /* Check API health on mount */
-  useEffect(() => {
-    checkHealth().then(({ data }) => {
-      setApiStatus(data?.status === 'ok' ? 'live' : 'offline');
-    }).catch(() => setApiStatus('offline'));
-  }, []);
-
-  /* ── Data Fetching & Mapping ─────────────────────────────────────────── */
-  const fetchData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      let result: any;
-      const scenarioId = ctx.scenarioId || '';
-      
-      switch(activeTab) {
-        case 'demand':
-          result = await fetchDemandDrivers(scenarioId);
-          if (result.data && result.data.length > 0) {
-            setTabRows(prev => ({
-              ...prev,
-              demand: result.data.map((d: any) => ({
-                id: d.id,
-                name: `Orders — ${d.market_id} (${d.platform_id})`,
-                current: d.base_orders,
-                prior: 0,
-                delta: '0%',
-                confidence: d.confidence_pct || 80,
-                owner: d.owner || 'Commercial',
-                reviewDate: '15 Apr 2026'
-              }))
-            }));
-          }
-          break;
-        case 'pricing':
-          result = await fetchPricePlans(scenarioId);
-          if (result.data && result.data.length > 0) {
-            setTabRows(prev => ({
-              ...prev,
-              pricing: result.data.map((d: any) => ({
-                id: d.id,
-                name: `${d.plan_name} — ${d.product_family_id}`,
-                current: `AED ${d.base_price}`,
-                prior: 0,
-                delta: '0%',
-                confidence: 85,
-                owner: 'Commercial',
-                reviewDate: '15 Apr 2026'
-              }))
-            }));
-          }
-          break;
-        case 'labor':
-          result = await fetchLaborModels(scenarioId);
-          if (result.data && result.data.length > 0) {
-            setTabRows(prev => ({
-              ...prev,
-              labor: result.data.map((d: any) => ({
-                id: d.id,
-                name: `${d.role_name} — ${d.kitchen_id}`,
-                current: `AED ${d.monthly_salary}`,
-                prior: 0,
-                delta: '0%',
-                confidence: 90,
-                owner: 'HR',
-                reviewDate: '15 Apr 2026'
-              }))
-            }));
-          }
-          break;
-        case 'marketing':
-          result = await fetchMarketingPlans(scenarioId);
-          if (result.data && result.data.length > 0) {
-            setTabRows(prev => ({
-              ...prev,
-              marketing: result.data.map((d: any) => ({
-                id: d.id,
-                name: `${d.plan_name} (${d.channel})`,
-                current: `${d.spend_pct_revenue}%`,
-                prior: 0,
-                delta: '0%',
-                confidence: 75,
-                owner: 'Marketing'
-              }))
-            }));
-          }
-          break;
-        case 'capex':
-          result = await fetchCapexPlans(scenarioId);
-          if (result.data && result.data.length > 0) {
-            setTabRows(prev => ({
-              ...prev,
-              capex: result.data.map((d: any) => ({
-                id: d.id,
-                name: `${d.plan_name} (${d.asset_category})`,
-                current: `AED ${d.budget_per_kitchen}`,
-                prior: 0,
-                delta: '0%',
-                confidence: 80,
-                owner: 'Finance'
-              }))
-            }));
-          }
-          break;
-        case 'funding':
-          const { data: fundingData } = await fetchFundingParameters(scenarioId);
-          if (fundingData) {
-            const { equity_rounds, debt_facilities } = fundingData;
-            setTabRows(prev => ({
-              ...prev,
-              funding: [
-                ...(equity_rounds || []).map((r: any) => ({
-                  id: r.id,
-                  type: 'equity',
-                  name: `Equity: ${r.round_name}`,
-                  current: `AED ${r.amount_raised}`,
-                  prior: 0,
-                  confidence: 85,
-                  evidence: r.lead_investor || '',
-                  owner: 'CFO'
-                })),
-                ...(debt_facilities || []).map((r: any) => ({
-                  id: r.id,
-                  type: 'debt',
-                  name: `Debt: ${r.lender_name}`,
-                  current: `AED ${r.principal_amount}`,
-                  prior: 0,
-                  confidence: 80,
-                  evidence: `${r.interest_rate_annual}%`,
-                  owner: 'Treasury'
-                }))
-              ]
-            }));
-          }
-          break;
-        case 'wc':
-          result = await fetchWorkingCapitalPolicies(scenarioId);
-          if (result.data && result.data.length > 0) {
-            const policy = result.data[0];
-            setTabRows(prev => ({
-              ...prev,
-              wc: [
-                { id: '1', name: 'Inventory Days', current: `${policy.inventory_days} days`, prior: '7 days', delta: '', confidence: 85, evidence: '', impact: '' },
-                { id: '2', name: 'Receivable Days (Platforms)', current: `${policy.platform_settlement_days} days`, prior: '21 days', delta: '', confidence: 85, evidence: '', impact: '' },
-                { id: '3', name: 'Payable Days (Suppliers)', current: `${policy.payable_days} days`, prior: '30 days', delta: '', confidence: 85, evidence: '', impact: '' },
-                { id: '4', name: 'Prepaid Rent (Months)', current: `${policy.cash_buffer_months} months`, prior: '3 months', delta: '', confidence: 95, evidence: '', impact: '' },
-              ]
-            }));
-          }
-          break;
-        default:
-          setTabRows(prev => ({ ...prev, [activeTab]: [...tabSeedData[activeTab]] }));
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-    } finally {
-      setIsLoading(false);
-      setIsDirty(false);
-    }
-  }, [activeTab, ctx.scenarioId]);
-
-  /* Re-fetch on scenario or tab change */
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const [setInfo, setSetInfo] = useState<AssumptionPanelInfo>(defaultSetInfo);
 
   /* Per-tab row state — persists across tab switches */
   const [tabRows, setTabRows] = useState<Record<string, any[]>>(() => {
@@ -424,6 +256,7 @@ export default function AssumptionsManager() {
 
   const currentRows = tabRows[activeTab] || [];
   const currentCols = tabColumns[activeTab] || [];
+  const selectedScenario = ctx.scenarios.find((scenario) => scenario.scenarioId === ctx.scenarioId);
 
   const defaultColDef = useMemo(() => ({
     flex: 1,
@@ -432,9 +265,76 @@ export default function AssumptionsManager() {
     sortable: true,
   }), []);
 
-  const confidenceColor = setInfo.confidence >= 80 ? 'text-green-700 bg-green-50 border-green-200'
-    : setInfo.confidence >= 60 ? 'text-amber-700 bg-amber-50 border-amber-200'
-    : 'text-red-700 bg-red-50 border-red-200';
+  const confidenceColor = setInfo.confidenceLabel === 'Preview'
+    ? 'text-slate-700 bg-slate-50 border-slate-200'
+    : setInfo.confidence >= 80
+      ? 'text-green-700 bg-green-50 border-green-200'
+      : setInfo.confidence >= 60
+        ? 'text-amber-700 bg-amber-50 border-amber-200'
+        : 'text-red-700 bg-red-50 border-red-200';
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!ctx.companyId || !ctx.scenarioId) {
+      setSetInfo(defaultSetInfo);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getAssumptionsSets({
+      companyId: ctx.companyId,
+      scenarioId: ctx.scenarioId,
+      versionId: selectedScenario?.latestVersionId,
+      limit: 1,
+    })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        const activeSet = data?.[0];
+
+        setSetInfo({
+          setId: activeSet?.assumptionSetId || 'Preview only',
+          version: selectedScenario?.latestVersionId
+            ? `Version ${selectedScenario.latestVersionId.slice(0, 8)}`
+            : 'Version unavailable',
+          owner: ctx.companyName || 'Pre-refactor shell',
+          confidence: activeSet ? 100 : 0,
+          confidenceLabel: activeSet ? 'Tracked' : 'Preview',
+          lastModified: formatPanelDate(activeSet?.createdAt),
+          approvalStatus: activeSet?.status || 'Preview only',
+        });
+
+        if (error) {
+          setBanner({
+            tone: 'warning',
+            text: 'Canonical assumption-set metadata is only partially wired. This workspace remains preview-only until the assumptions refactor starts.',
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSetInfo(defaultSetInfo);
+          setBanner({
+            tone: 'warning',
+            text: 'Assumption-set metadata could not be loaded. This workspace is still available for local draft exploration only.',
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.companyId, ctx.companyName, ctx.scenarioId, selectedScenario?.latestVersionId]);
+
+  useEffect(() => {
+    const nextRows: Record<string, any[]> = {};
+    for (const key of Object.keys(tabSeedData)) {
+      nextRows[key] = [...tabSeedData[key]];
+    }
+    setTabRows(nextRows);
+    setIsDirty(false);
+  }, [ctx.scenarioId]);
 
   /* ── Row management ─────────────────────────────────────────────────── */
   const addRow = useCallback(() => {
@@ -493,178 +393,30 @@ export default function AssumptionsManager() {
   /* ── Save & Compute ─────────────────────────────────────────────────── */
   const handleSaveDraft = useCallback(async () => {
     setIsSaving(true);
-    setErrorMessage(null);
+    setBanner(null);
     try {
-      const scenarioId = ctx.scenarioId || '';
-      const currentData = tabRows[activeTab];
-
-      let result: any;
-      switch(activeTab) {
-        case 'demand':
-          const drivers = currentData.map(r => ({
-            scenario_id: scenarioId,
-            assumption_set_id: 'AS-2025-03',
-            planning_period_id: 'p_2026_01',
-            market_id: r.name.includes('JLT') ? 'm_dubai_jlt' : 'm_dubai_marina',
-            platform_id: 'pl_talabat',
-            product_family_id: 'pf_burgers',
-            base_orders: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            confidence_pct: r.confidence
-          }));
-          result = await upsertDemandDrivers(drivers);
-          break;
-        case 'pricing':
-          const pricePlans = {
-            scenario_id: scenarioId,
-            plans: currentData.map(r => ({
-              plan_name: r.name.split(' — ')[0],
-              product_family_id: 'pf_pizza',
-              base_price: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            }))
-          };
-          result = await upsertPricePlans(pricePlans);
-          break;
-        case 'labor':
-          const laborModels = {
-            scenario_id: scenarioId,
-            models: currentData.map(r => ({
-              role_name: r.name.split(' — ')[0],
-              kitchen_id: 'k_dubai_001',
-              monthly_salary: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            }))
-          };
-          result = await upsertLaborModels(laborModels);
-          break;
-        case 'marketing':
-          const marketingPlans = {
-            scenario_id: scenarioId,
-            plans: currentData.map(r => ({
-              plan_name: r.name.split(' (')[0],
-              channel: 'digital',
-              spend_pct_revenue: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            }))
-          };
-          result = await upsertMarketingPlans(marketingPlans);
-          break;
-        case 'capex':
-          const capexPlans = {
-            scenario_id: scenarioId,
-            plans: currentData.map(r => ({
-              plan_name: r.name.split(' (')[0],
-              asset_category: 'kitchen_equipment',
-              budget_per_kitchen: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            }))
-          };
-          result = await upsertCapexPlans(capexPlans);
-          break;
-        case 'funding':
-          const fundingParams = {
-            scenario_id: scenarioId,
-            equity_rounds: currentData.filter(r => r.type === 'equity').map(r => ({
-              round_name: r.name.replace('Equity: ', ''),
-              amount_raised: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-              lead_investor: r.evidence
-            })),
-            debt_facilities: currentData.filter(r => r.type === 'debt').map(r => ({
-              lender_name: r.name.replace('Debt: ', ''),
-              principal_amount: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-              interest_rate_annual: parseFloat(r.evidence) || 0
-            }))
-          };
-          result = await upsertFundingParameters(fundingParams);
-          break;
-        case 'wc':
-          const wcPolicy = {
-            scenario_id: scenarioId,
-            assumption_set_id: 'AS-2025-03',
-            kitchen_id: 'k_dubai_001',
-            inventory_days: parseInt(String(currentData.find(r => r.name === 'Inventory Days')?.current).replace(/[^0-9]/g, '')) || 0,
-            payable_days: parseInt(String(currentData.find(r => r.name === 'Payable Days (Suppliers)')?.current).replace(/[^0-9]/g, '')) || 0,
-            platform_settlement_days: parseInt(String(currentData.find(r => r.name === 'Receivable Days (Platforms)')?.current).replace(/[^0-9]/g, '')) || 0,
-          };
-          result = await upsertWorkingCapitalPolicies(wcPolicy);
-          break;
-        case 'cost':
-          const costProfiles = {
-            scenario_id: scenarioId,
-            profiles: currentData.map(r => ({
-              product_family_id: 'pf_pizza',
-              raw_material_cost: parseFloat(String(r.current).replace(/[^0-9.]/g, '')) || 0,
-            }))
-          };
-          result = await upsertUnitCostProfiles(costProfiles);
-          break;
-        default:
-          console.warn('Save logic not implemented for tab:', activeTab);
-      }
-
-      if (result?.error) {
-        setErrorMessage(`API Save failed: ${result.error}. Data updated locally.`);
-      } else {
-        setIsDirty(false);
-      }
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      setIsDirty(false);
+      setBanner({
+        tone: 'warning',
+        text: 'This assumptions workspace is still a pre-refactor preview. Draft edits are local to this browser session until canonical assumption writes are implemented.',
+      });
     } catch (err: any) {
-      setErrorMessage(`Save error: ${err.message}`);
+      setBanner({
+        tone: 'error',
+        text: `Local draft save failed: ${err.message}`,
+      });
     } finally {
       setIsSaving(false);
     }
-  }, [activeTab, tabRows, ctx.scenarioId]);
+  }, []);
 
-  const handleRunEngine = useCallback(async () => {
-    setIsComputing(true);
-    setJobProgress(5);
-    setErrorMessage(null);
-    try {
-      /* Step 1: Save assumptions */
-      await handleSaveDraft();
-      setJobProgress(20);
-
-      /* Step 2: Trigger compute via typed API helper */
-      const { data: computeData, error: computeError } = await triggerCompute({
-        scenario_id: ctx.scenarioId || '',
-        assumption_set_id: setInfo.setId,
-        period_range_start: 'p_2026_01',
-        period_range_end: 'p_2026_12',
-      });
-
-      if (computeError || !computeData?.job_id) throw new Error(computeError || 'No job_id returned');
-
-      const jobId = computeData.job_id;
-      setJobProgress(30);
-
-      /* Step 3: Poll for job completion */
-      const poll = setInterval(async () => {
-        const { data: pollData } = await pollJob(jobId);
-        if (!pollData) return; // silent retry
-        if (pollData.status === 'COMPLETED') {
-          clearInterval(poll);
-          setJobProgress(100);
-          setTimeout(() => router.push('/dashboard/pnl'), 800);
-        } else if (pollData.progress_pct) {
-          setJobProgress(Math.max(30, pollData.progress_pct));
-        } else if (pollData.status === 'FAILED') {
-          clearInterval(poll);
-          setErrorMessage('Engine computation failed. Check server logs.');
-          setIsComputing(false);
-        }
-      }, 500);
-    } catch (err: any) {
-      /* Graceful degradation: simulate compute if API is offline */
-      console.warn('API compute unavailable, simulating locally:', err.message);
-      let progress = 20;
-      const sim = setInterval(() => {
-        progress += 15;
-        setJobProgress(Math.min(progress, 100));
-        if (progress >= 100) {
-          clearInterval(sim);
-          setTimeout(() => {
-            setIsComputing(false);
-            router.push('/dashboard/pnl');
-          }, 600);
-        }
-      }, 400);
-    }
-  }, [handleSaveDraft, router, ctx]);
+  const handleRunEngine = useCallback(() => {
+    setBanner({
+      tone: 'warning',
+      text: 'Run Engine is intentionally disabled during pre-refactor stabilization. Use the canonical finance screens for live outputs while the assumptions orchestration is being migrated.',
+    });
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -711,14 +463,9 @@ export default function AssumptionsManager() {
               <CheckCircle2 className="w-3.5 h-3.5" />
               {setInfo.approvalStatus}
             </div>
-            {/* API Status Indicator */}
-            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold ${
-              apiStatus === 'live'     ? 'bg-green-500/20 text-green-200 border border-green-400/30' :
-              apiStatus === 'offline' ? 'bg-red-500/20 text-red-200 border border-red-400/30' :
-              'bg-gray-500/20 text-gray-300 border border-gray-400/30'
-            }`}>
-              {apiStatus === 'live' ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-              {apiStatus === 'live' ? 'API Live' : apiStatus === 'offline' ? 'API Offline' : 'Checking…'}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold bg-slate-500/20 text-slate-200 border border-slate-400/30">
+              <AlertCircle className="w-3.5 h-3.5" />
+              Preview Only
             </div>
           </div>
         </div>
@@ -754,53 +501,52 @@ export default function AssumptionsManager() {
               {subTabs.find(t => t.key === activeTab)?.label} Assumptions
             </h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Click any blue cell to edit · Add/delete rows below · Ctrl+C/V for copy/paste
+              Pre-refactor preview shell: edits are local-only until canonical assumption bindings and compute orchestration are migrated.
             </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={handleSaveDraft}
-              disabled={isSaving || isComputing}
+              disabled={isSaving}
               className="px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition font-medium text-xs flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
-              {isSaving ? 'Saving...' : 'Save Draft'}
+              {isSaving ? 'Saving...' : 'Save Local Draft'}
             </button>
             <button
               onClick={handleRunEngine}
-              disabled={isSaving || isComputing}
-              className="px-4 py-1.5 rounded-md bg-[#1B2A4A] hover:bg-[#263B5E] text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              disabled={isSaving}
+              className="px-4 py-1.5 rounded-md bg-slate-400 hover:bg-slate-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
-              {isComputing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5 fill-white" />}
-              {isComputing ? `Computing ${jobProgress}%` : 'Run Engine'}
+              <Play className="w-3.5 h-3.5 fill-white" />
+              Run Engine Pending Refactor
             </button>
           </div>
         </div>
       </div>
 
-      {/* Error Banner */}
-      {errorMessage && (
+      {/* Status Banner */}
+      {banner && (
         <div className="max-w-[1440px] mx-auto w-full px-6">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3">
-            <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700 flex-1">{errorMessage}</p>
-            <button onClick={() => setErrorMessage(null)} className="text-red-400 hover:text-red-600 text-[10px] font-bold uppercase">Dismiss</button>
-          </div>
-        </div>
-      )}
-
-      {/* Progress Bar */}
-      {isComputing && (
-        <div className="max-w-[1440px] mx-auto w-full px-6 pt-3">
-          <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 relative overflow-hidden">
-            <div className="absolute top-0 left-0 h-1 bg-blue-100 w-full" />
-            <div className="absolute top-0 left-0 h-1 bg-[#1B2A4A] transition-all duration-300" style={{ width: `${jobProgress}%` }} />
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-blue-700 font-medium flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Financial Engine Processing...
-              </span>
-              <span className="text-sm font-bold text-[#1B2A4A]">{jobProgress}%</span>
-            </div>
+          <div className={`rounded-lg p-3 flex items-start gap-3 ${
+            banner.tone === 'error' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'
+          }`}>
+            <AlertCircle className={`w-4 h-4 shrink-0 mt-0.5 ${
+              banner.tone === 'error' ? 'text-red-500' : 'text-amber-500'
+            }`} />
+            <p className={`text-xs flex-1 ${
+              banner.tone === 'error' ? 'text-red-700' : 'text-amber-800'
+            }`}>{banner.text}</p>
+            <button
+              onClick={() => setBanner(null)}
+              className={`text-[10px] font-bold uppercase ${
+                banner.tone === 'error'
+                  ? 'text-red-400 hover:text-red-600'
+                  : 'text-amber-500 hover:text-amber-700'
+              }`}
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
@@ -860,7 +606,7 @@ export default function AssumptionsManager() {
           <AgGridReact
             ref={gridRef}
             key={`${activeTab}-${ctx.scenarioId}`}
-            rowData={isLoading ? [] : currentRows}
+            rowData={currentRows}
             columnDefs={currentCols}
             defaultColDef={defaultColDef}
             rowSelection="multiple"
