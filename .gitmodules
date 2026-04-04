@@ -1,0 +1,3 @@
+[submodule "specos"]
+	path = specos
+	url = https://github.com/AshutoshMahindru/Modelling_Engine_SpecOS.git
