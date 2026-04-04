@@ -34,7 +34,7 @@ const FALLBACK_RISKS: RiskItem[] = [
 
 export default function RiskDashboard() {
   const ctx = usePlanningContext();
-  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+  const scenarioId = ctx.scenarioId || '';
 
   const { data: risks, source, lastFetched } = useApiData<RiskItem[]>(
     () => fetchRiskScenarios(scenarioId),
@@ -81,13 +81,13 @@ export default function RiskDashboard() {
               Risk & Uncertainty Dashboard
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-              {ctx.scopeLabel} — {ctx.scenarioLabel} 
-              <DataFreshness source={source} lastFetched={lastFetched} />
+              {ctx.companyName} — {ctx.scenarioName} 
+              <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
             </p>
           </div>
           <div className="flex items-center gap-3">
             <button 
-               onClick={() => exportCSV(`FPE_Risk_Register_${ctx.scenarioLabel}`, ['ID', 'Risk', 'Category', 'Prob %', 'Impact AED'], risks.map(r => [r.risk_id, r.name, r.category, String(r.probability_pct), String(r.financial_impact_estimate)]))}
+               onClick={() => exportCSV(`FPE_Risk_Register_${ctx.scenarioName}`, ['ID', 'Risk', 'Category', 'Prob %', 'Impact AED'], risks.map(r => [r.risk_id, r.name, r.category, String(r.probability_pct), String(r.financial_impact_estimate)]))}
                className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 shadow-sm transition"
             >
               <Download className="w-3.5 h-3.5" /> Export Register

@@ -1,0 +1,1764 @@
+[
+  {
+    "id": "api_context_001",
+    "method": "GET",
+    "path": "/api/v1/context/companies",
+    "stage": "context",
+    "description": "List all companies the user has access to",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "Filter by status (active|archived)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "companyId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "UNAUTHORIZED",
+          "status": 401,
+          "description": "User not authenticated"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_002",
+    "method": "POST",
+    "path": "/api/v1/context/companies",
+    "stage": "context",
+    "description": "Create a new company record",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "name",
+          "industry",
+          "baseCurrency"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Company name"
+          },
+          "industry": {
+            "type": "string",
+            "description": "Industry classification"
+          },
+          "baseCurrency": {
+            "type": "string",
+            "description": "ISO 4217 currency code"
+          },
+          "fiscalYearStart": {
+            "type": "integer",
+            "description": "Fiscal year start month (1-12)"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "companyId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "DUPLICATE_COMPANY_NAME",
+          "status": 409,
+          "description": "Duplicate company name detected"
+        },
+        {
+          "code": "UNAUTHORIZED",
+          "status": 401,
+          "description": "User not authenticated"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_003",
+    "method": "GET",
+    "path": "/api/v1/context/companies/:companyId",
+    "stage": "context",
+    "description": "Retrieve a single company by ID",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "description": "Company identifier"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "companyId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "industry": {
+                  "type": "string"
+                },
+                "baseCurrency": {
+                  "type": "string"
+                },
+                "fiscalYearStart": {
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                },
+                "updatedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        },
+        {
+          "code": "UNAUTHORIZED",
+          "status": 401,
+          "description": "User not authenticated"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_004",
+    "method": "PATCH",
+    "path": "/api/v1/context/companies/:companyId",
+    "stage": "context",
+    "description": "Update company details",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Updated name"
+          },
+          "industry": {
+            "type": "string",
+            "description": "Updated industry"
+          },
+          "baseCurrency": {
+            "type": "string",
+            "description": "Updated currency"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Audit reason"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "description": "Company identifier"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "companyId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "UNAUTHORIZED",
+          "status": 401,
+          "description": "User not authenticated"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_005",
+    "method": "GET",
+    "path": "/api/v1/context/companies/:companyId/calendars",
+    "stage": "context",
+    "description": "List planning calendars for a company",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "description": "Company identifier"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "calendarId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "fiscalYearStart": {
+                    "type": "integer"
+                  },
+                  "periodGranularity": {
+                    "type": "string"
+                  },
+                  "periods": {
+                    "type": "array"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        },
+        {
+          "code": "UNAUTHORIZED",
+          "status": 401,
+          "description": "User not authenticated"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_006",
+    "method": "POST",
+    "path": "/api/v1/context/companies/:companyId/calendars",
+    "stage": "context",
+    "description": "Create a planning calendar for a company",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "name",
+          "fiscalYearStart",
+          "periodGranularity"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Calendar name"
+          },
+          "fiscalYearStart": {
+            "type": "integer",
+            "description": "Start month (1-12)"
+          },
+          "periodGranularity": {
+            "type": "string",
+            "description": "monthly|quarterly|annual"
+          },
+          "horizonYears": {
+            "type": "integer",
+            "description": "Planning horizon in years"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "description": "Company identifier"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "calendarId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "DUPLICATE_CALENDAR",
+          "status": 409,
+          "description": "Duplicate calendar detected"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_007",
+    "method": "GET",
+    "path": "/api/v1/context/planning-periods",
+    "stage": "context",
+    "description": "List planning periods for the selected calendar",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company ID"
+        },
+        {
+          "name": "calendarId",
+          "type": "uuid",
+          "required": false,
+          "description": "Calendar ID"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "periodId": {
+                    "type": "uuid"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "startDate": {
+                    "type": "date"
+                  },
+                  "endDate": {
+                    "type": "date"
+                  },
+                  "granularity": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_008",
+    "method": "GET",
+    "path": "/api/v1/context/scenarios",
+    "stage": "context",
+    "description": "List scenarios for a company",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company ID"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "Filter by status"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "scenarioId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  },
+                  "latestVersionId": {
+                    "type": "uuid"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_009",
+    "method": "POST",
+    "path": "/api/v1/context/scenarios",
+    "stage": "context",
+    "description": "Create a new scenario",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "name"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Scenario name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description"
+          },
+          "baseScenarioId": {
+            "type": "uuid",
+            "description": "Base scenario for inheritance"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "scenarioId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_010",
+    "method": "POST",
+    "path": "/api/v1/context/scenarios/:scenarioId/clone",
+    "stage": "context",
+    "description": "Clone a scenario into a new draft",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Cloned scenario name"
+          },
+          "includeAssumptions": {
+            "type": "boolean",
+            "description": "Clone assumptions (default true)"
+          },
+          "includeDecisions": {
+            "type": "boolean",
+            "description": "Clone decisions (default true)"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "description": "Source scenario ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "scenarioId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "clonedFrom": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "SCENARIO_NOT_FOUND",
+          "status": 404,
+          "description": "Scenario not found"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_011",
+    "method": "PATCH",
+    "path": "/api/v1/context/scenarios/:scenarioId",
+    "stage": "context",
+    "description": "Update scenario metadata",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Updated name"
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated description"
+          },
+          "status": {
+            "type": "string",
+            "description": "active|archived"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Audit reason"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "description": "Scenario ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "scenarioId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "SCENARIO_NOT_FOUND",
+          "status": 404,
+          "description": "Scenario not found"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_012",
+    "method": "GET",
+    "path": "/api/v1/context/versions",
+    "stage": "context",
+    "description": "List plan versions for a scenario",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-GOV"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company ID"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": true,
+          "description": "Scenario ID"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "Filter by status"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "versionId": {
+                    "type": "uuid"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "governanceState": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "SCENARIO_NOT_FOUND",
+          "status": 404,
+          "description": "Scenario not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_013",
+    "method": "POST",
+    "path": "/api/v1/context/versions",
+    "stage": "context",
+    "description": "Create a new plan version under a scenario",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-GOV"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "label"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "label": {
+            "type": "string",
+            "description": "Version label"
+          },
+          "baseVersionId": {
+            "type": "uuid",
+            "description": "Base version for iteration"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "uuid"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "SCENARIO_NOT_FOUND",
+          "status": 404,
+          "description": "Scenario not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_014",
+    "method": "GET",
+    "path": "/api/v1/context/versions/:versionId",
+    "stage": "context",
+    "description": "Retrieve a single plan version",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-GOV"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "description": "Version ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "uuid"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "scenarioId": {
+                  "type": "uuid"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                },
+                "publishedAt": {
+                  "type": "datetime"
+                },
+                "frozenAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VERSION_NOT_FOUND",
+          "status": 404,
+          "description": "Version not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_015",
+    "method": "POST",
+    "path": "/api/v1/context/versions/:versionId/freeze",
+    "stage": "context",
+    "description": "Freeze a version to prevent edits",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-GOV"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Audit reason for freezing"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "description": "Version ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "uuid"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "frozenAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VERSION_NOT_FOUND",
+          "status": 404,
+          "description": "Version not found"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "APPROVAL_STATE_INVALID",
+          "status": 409,
+          "description": "Invalid approval state transition"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_016",
+    "method": "POST",
+    "path": "/api/v1/context/versions/:versionId/publish",
+    "stage": "context",
+    "description": "Publish a version for stakeholder visibility",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-GOV"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Audit reason for publishing"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "description": "Version ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "versionId": {
+                  "type": "uuid"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "publishedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VERSION_NOT_FOUND",
+          "status": 404,
+          "description": "Version not found"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        },
+        {
+          "code": "APPROVAL_STATE_INVALID",
+          "status": 409,
+          "description": "Invalid approval state transition"
+        },
+        {
+          "code": "INSUFFICIENT_CONFIDENCE",
+          "status": 409,
+          "description": "Confidence level too low for this action"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_context_017",
+    "method": "GET",
+    "path": "/api/v1/context/overview",
+    "stage": "context",
+    "description": "Read-model for shell state, headline KPIs, alerts, and quick links",
+    "gs_source": "API_SPEC.md \u00a75.1 Context APIs",
+    "requirement_families": [
+      "R-CTX",
+      "R-UXA"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "company": {
+                  "type": "object"
+                },
+                "activeScenario": {
+                  "type": "object"
+                },
+                "activeVersion": {
+                  "type": "object"
+                },
+                "headlineKpis": {
+                  "type": "object",
+                  "properties": {
+                    "revenue": {
+                      "type": "number"
+                    },
+                    "ebitda": {
+                      "type": "number"
+                    },
+                    "burn": {
+                      "type": "number"
+                    },
+                    "runway": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "alerts": {
+                  "type": "array"
+                },
+                "quickLinks": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "COMPANY_NOT_FOUND",
+          "status": 404,
+          "description": "Company not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  }
+]

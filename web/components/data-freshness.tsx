@@ -37,7 +37,7 @@ export default function DataFreshness({ source, lastFetched }: Props = {}) {
 
   // ── Timestamp ──
   const TimeBadge = () => {
-    const timestamp = lastFetched || (ctx.lastComputed ? new Date(ctx.lastComputed) : null);
+    const timestamp = lastFetched || (null);
     if (!timestamp) {
       return (
         <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-md">

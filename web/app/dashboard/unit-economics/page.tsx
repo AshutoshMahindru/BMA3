@@ -22,7 +22,7 @@ const paybackCurve = PAYBACK_CURVE;
 
 export default function UnitEconomicsConsole() {
   const ctx = usePlanningContext();
-  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+  const scenarioId = ctx.scenarioId || '';
 
   const { data: waterfall, source, lastFetched } = useApiData<WaterfallRow[]>(
     () => fetchUnitEconomics(scenarioId),
@@ -43,8 +43,8 @@ export default function UnitEconomicsConsole() {
             Unit Economics Console
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — {ctx.scenarioLabel} — Per-Order Breakdown
-            <DataFreshness source={source} lastFetched={lastFetched} />
+            {ctx.companyName} — {ctx.scenarioName} — Per-Order Breakdown
+            <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
           </p>
         </div>
         <div className="flex items-center gap-2">

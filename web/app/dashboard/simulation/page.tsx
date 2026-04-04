@@ -84,7 +84,7 @@ export default function SimulationLab() {
             <FlaskConical className="w-5 h-5 text-[#1E5B9C]" /> Simulation Lab
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — {ctx.scenarioLabel} — Adjust drivers to explore sensitivity
+            {ctx.companyName} — {ctx.scenarioName} — Adjust drivers to explore sensitivity
             <DataFreshness />
           </p>
         </div>

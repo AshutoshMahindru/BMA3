@@ -63,7 +63,7 @@ export default function ConfidenceTracker() {
           Assumption Confidence Tracker
         </h1>
         <p className="text-sm text-gray-500 mt-1">
-          {ctx.scopeLabel} — {ctx.scenarioLabel} — Confidence Assessment Matrix
+          {ctx.companyName} — {ctx.scenarioName} — Confidence Assessment Matrix
         </p>
       </div>
 

@@ -40,7 +40,7 @@ export default function TriggerDashboard() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <Bell className="w-5 h-5 text-[#1E5B9C]" /> Trigger & Alert Dashboard
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Automated monitoring triggers and expansion readiness</p>
+        <p className="text-sm text-gray-500 mt-1">{ctx.companyName} — Automated monitoring triggers and expansion readiness</p>
       </div>
       <div className="px-6 pb-8 space-y-6">
         {/* Active Triggers */}

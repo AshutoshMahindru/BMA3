@@ -30,7 +30,7 @@ export default function MarketAttractiveness() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <Target className="w-5 h-5 text-[#1E5B9C]" /> Market Attractiveness Scoring
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Weighted scoring matrix — 7 dimensions × 8 markets</p>
+        <p className="text-sm text-gray-500 mt-1">{ctx.companyName} — Weighted scoring matrix — 7 dimensions × 8 markets</p>
       </div>
       <div className="px-6 pb-8 space-y-6">
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">

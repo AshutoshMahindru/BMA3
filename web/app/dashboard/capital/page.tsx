@@ -42,7 +42,7 @@ export default function CapitalStrategy() {
             <TrendingUp className="w-5 h-5 text-[#1E5B9C]" /> Capital Strategy & Raise Planning
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — {ctx.timePeriodLabel} — {ctx.scenarioLabel}
+            {ctx.companyName} — {ctx.periodLabel} — {ctx.scenarioName}
             <DataFreshness />
           </p>
         </div>

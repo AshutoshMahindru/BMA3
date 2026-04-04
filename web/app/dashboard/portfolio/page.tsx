@@ -37,7 +37,7 @@ export default function PortfolioOptimization() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <Briefcase className="w-5 h-5 text-[#1E5B9C]" /> Portfolio Optimization
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Go/No-Go Decision Matrix — {ctx.scenarioLabel}</p>
+        <p className="text-sm text-gray-500 mt-1">{ctx.companyName} — Go/No-Go Decision Matrix — {ctx.scenarioName}</p>
       </div>
       <div className="px-6 pb-8 space-y-6">
         {/* Summary Cards */}

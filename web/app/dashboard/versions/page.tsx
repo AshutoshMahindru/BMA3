@@ -35,7 +35,7 @@ export default function VersionManager() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <GitBranch className="w-5 h-5 text-[#1E5B9C]" /> Plan Version Manager
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{ctx.scenarioLabel} — Track assumption changes across planning cycles</p>
+        <p className="text-sm text-gray-500 mt-1">{ctx.scenarioName} — Track assumption changes across planning cycles</p>
       </div>
       <div className="px-6 pb-8 space-y-6">
         {/* Version History */}

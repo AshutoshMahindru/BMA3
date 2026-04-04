@@ -73,7 +73,7 @@ export default function DriverExplainability() {
               Driver Explainability Console
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-              {ctx.scopeLabel} — {ctx.scenarioLabel} — Month-over-Month Attribution
+              {ctx.companyName} — {ctx.scenarioName} — Month-over-Month Attribution
               <DataFreshness />
             </p>
           </div>
@@ -99,7 +99,7 @@ export default function DriverExplainability() {
               onClick={() => {
                 const h = ['Driver', 'Contribution', 'Direction', '% Impact', 'Root Assumption', 'Confidence'];
                 const r = driverAttribution.map(d => [d.driver, d.contribution, d.direction, d.pctImpact, d.rootAssumption, d.confidence + '%']);
-                exportCSV(`Explainability_${ctx.scenarioLabel.replace(/ /g, '_')}`, h, r);
+                exportCSV(`Explainability_${ctx.scenarioName.replace(/ /g, '_')}`, h, r);
               }}
               className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"
             >
@@ -109,7 +109,7 @@ export default function DriverExplainability() {
               onClick={() => {
                 const h = ['Driver', 'Contribution', '% Impact', 'Root Assumption', 'Confidence'];
                 const r = driverAttribution.map(d => [d.driver, d.contribution, d.pctImpact, d.rootAssumption, d.confidence + '%']);
-                exportPDF(`Driver Explainability — ${ctx.scenarioLabel}`, h, r);
+                exportPDF(`Driver Explainability — ${ctx.scenarioName}`, h, r);
               }}
               className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"
             >
