@@ -8,7 +8,8 @@
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
 | `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
 | Test count | 117 | **119** (+2 contract/integration tests on top of earlier route coverage) |
-| Playwright dashboard smoke | **3/3** | **5/5** (scenario compare, scope editors, scope review, compute center, wizard) |
+| Playwright dashboard smoke | **3/3** | **7/7** (scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, wizard) |
+| AI SME overlays | Missing | **Implemented** — advisory overlays live in `executive/page.tsx` and `pnl/page.tsx` |
 | Compliant code routes | 107 | **114** |
 
 ---
@@ -20,12 +21,12 @@
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
 | Jest suite | **119/119 passing** |
-| Playwright E2E | **5/5 passing** |
-| Wave status | Wave 5 **PARTIAL** (Docker runtime verification pending locally) |
+| Playwright E2E | **7/7 passing** |
+| Wave status | Wave 5 **DONE** — compose-hosted runtime verified |
 
 ---
 
-## API Coverage: Fully Closed
+## API Coverage: Route Surface Fully Closed
 
 **Spec: 128 — Implemented: 128 — Gap: 0**
 
@@ -42,6 +43,8 @@
 | `governance.ts` | 12 | 12 | 0 |
 | `reference.ts` | 8 | 8 | 0 ✅ new |
 | `ai.ts` | 4 | 4 | 0 ✅ new |
+
+Route-count parity is complete, but one behavioral caveat remains inside the assumptions surface: `/packs`, `/packs/:packId/apply`, `/overrides`, and the family write flows in [api/src/routes/v1/assumptions.ts](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/api/src/routes/v1/assumptions.ts) are still partially placeholder-backed even though the contract paths are present.
 
 ---
 
@@ -77,7 +80,6 @@ Several earlier “mismatches” are now explicit canonical `dashboard_path` map
 | Gap type | Surface |
 |---|---|
 | Consolidated into one tabbed page | Demand / Cost / Funding / Working Capital assumptions live inside `assumptions/page.tsx` |
-| Missing overlay pattern | AI SME overlays (2) |
 
 ---
 
@@ -90,24 +92,24 @@ Several earlier “mismatches” are now explicit canonical `dashboard_path` map
 | Variables | 73 | 73 |
 | Metrics | 35 | 35 |
 
-The real orchestrator runs in the integration suite, but the current golden harness directly seeds **34** canonical assumption bindings rather than asserting one-by-one coverage for all **73** variables or all **35** metrics.
+The real orchestrator runs in the integration suite, and the live async queue path is now also proven on both the host-run and compose-hosted stacks. The golden harness still directly seeds **34** canonical assumption bindings rather than asserting one-by-one coverage for all **73** variables or all **35** metrics.
 
 ---
 
 ## Database — Fully Covered
 
 - All **50 entities** from `canonical_schema.json` present in DDL.
-- 4 migrations landed: `001` schema reconciliation → `002` unique constraints → `003` decision rationale upserts → `004` canonical-alias backfill.
+- 5 migrations landed: `001` schema reconciliation → `002` unique constraints → `003` decision rationale upserts → `004` canonical-alias backfill → `005` canonical assumption-pack/bootstrap seed.
 
 ---
 
-## Wave 5 Remaining Items
+## Wave 5 Closure Status
 
 | Item | Status |
 |---|---|
 | `db/migrations/` tooling (node-pg-migrate) | **DONE** — root scripts + `scripts/migrate.mjs` + baseline scaffold |
-| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, scope review, compute center, and wizard smoke flows |
-| Full `docker-compose` stack (Redis, worker) | **PARTIAL** — full stack is defined, but local boot verification is blocked until Docker is available |
+| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, and wizard smoke flows |
+| Full `docker-compose` stack (Redis, worker) | **DONE** — `docker compose up -d` boots Postgres + Redis + API + worker + web locally; a compose-hosted queued compute run completes all 18 steps |
 
 ---
 
@@ -115,5 +117,5 @@ The real orchestrator runs in the integration suite, but the current golden harn
 
 | # | Gap | Effort |
 |---|---|---|
-| 1 | AI SME overlay patterns (2) | Medium |
-| 2 | Local `docker compose up` runtime verification once Docker is available | Low |
+| 1 | Assumptions API behavior completion (`/packs`, `/packs/:packId/apply`, `/overrides`, and family writes) | Medium |
+| 2 | Financial reconciliation cleanup for the seeded base scenario (negative PPE / balance-sheet imbalance warnings still appear during steps 11 and 16) | Medium |

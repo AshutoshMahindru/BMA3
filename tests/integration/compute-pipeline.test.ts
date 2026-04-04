@@ -172,7 +172,7 @@ class MockRuntime {
     this.scenario = {
       id: this.ctx.scenario_id,
       name: fixture.name,
-      scenario_family: fixture.name.includes('growth') ? 'bull' : 'base',
+      scenario_family: fixture.name.includes('growth') ? 'bull_case' : 'base',
       status: 'active',
       company_id: this.ctx.company_id,
     };
@@ -304,12 +304,12 @@ class MockRuntime {
       return this.result([this.scenario]);
     }
 
-    if (q.includes('select id, status, version_label from plan_versions')) {
-      return this.result([this.version]);
+    if (q.includes('select id, status, name as version_label, is_frozen from plan_versions')) {
+      return this.result([{ ...this.version, is_frozen: false }]);
     }
 
-    if (q.includes('select id, status from plan_versions where id = $1')) {
-      return this.result([{ id: this.version.id, status: this.version.status }]);
+    if (q.includes('select id, status, is_frozen from plan_versions') && q.includes('where id = $1')) {
+      return this.result([{ id: this.version.id, status: this.version.status, is_frozen: false }]);
     }
 
     if (q.includes('from planning_periods')) {
@@ -359,6 +359,10 @@ class MockRuntime {
       return this.result([this.pack]);
     }
 
+    if (q.includes('select distinct on (coalesce(ap.assumption_family, ap.family))')) {
+      return this.result([{ family: 'market', pack_id: this.pack.id }]);
+    }
+
     if (q.includes('join assumption_pack_bindings apb')) {
       return this.result([{ pack_id: this.pack.id }]);
     }
@@ -401,11 +405,15 @@ class MockRuntime {
       return this.result([]);
     }
 
+    if (q.includes('from kitchens')) {
+      return this.result([{ id: makeUuid(9000) }]);
+    }
+
     if (q.includes('select id') && q.includes('from compute_runs') && q.includes('where id = $1')) {
       return this.result([]);
     }
 
-    if (q.includes('select afb.id, afb.evidence_type, afb.evidence_ref, afb.updated_at')) {
+    if (q.includes('select afb.id, afb.pack_id, afb.evidence_type, afb.evidence_ref, afb.updated_at')) {
       const variableName = String(params[1] ?? '');
       const binding = this.bindings.find((candidate) => candidate.variable_name === variableName);
       if (!binding) {
@@ -414,6 +422,7 @@ class MockRuntime {
       return this.result([
         {
           id: binding.id,
+          pack_id: binding.pack_id,
           evidence_type: binding.evidence_type,
           evidence_ref: binding.evidence_ref,
           updated_at: binding.updated_at,
@@ -421,28 +430,38 @@ class MockRuntime {
       ]);
     }
 
+    if (
+      q.startsWith('delete from pnl_projections')
+      || q.startsWith('delete from cashflow_projections')
+      || q.startsWith('delete from balance_sheet_projections')
+      || q.startsWith('delete from unit_economics_projections')
+      || q.startsWith('delete from kpi_projections')
+    ) {
+      return this.result([]);
+    }
+
     if (q.startsWith('insert into pnl_projections')) {
-      this.storeMetric(this.pnlProjections, params[4], params[6], params[7]);
+      this.storeMetric(this.pnlProjections, params[7], params[9], params[10]);
       return this.result([]);
     }
 
     if (q.startsWith('insert into cashflow_projections')) {
-      this.storeMetric(this.cashflowProjections, params[4], params[6], params[7]);
+      this.storeMetric(this.cashflowProjections, params[6], params[8], params[9]);
       return this.result([]);
     }
 
     if (q.startsWith('insert into balance_sheet_projections')) {
-      this.storeMetric(this.balanceSheetProjections, params[4], params[6], params[7]);
+      this.storeMetric(this.balanceSheetProjections, params[6], params[8], params[9]);
       return this.result([]);
     }
 
     if (q.startsWith('insert into unit_economics_projections')) {
-      this.storeMetric(this.unitEconomicsProjections, params[4], params[6], params[7]);
+      this.storeMetric(this.unitEconomicsProjections, params[7], params[9], params[10]);
       return this.result([]);
     }
 
     if (q.startsWith('insert into kpi_projections')) {
-      this.storeMetric(this.kpiProjections, params[4], params[6], params[7]);
+      this.storeMetric(this.kpiProjections, params[9], params[11], params[12]);
       return this.result([]);
     }
 

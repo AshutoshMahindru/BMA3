@@ -54,6 +54,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - ./:/workspace
+      - api_node_modules:/workspace/api/node_modules
     ports:
       - "${API_HOST_PORT:-4000}:4000"
     restart: unless-stopped
@@ -79,6 +80,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - ./:/workspace
+      - worker_node_modules:/workspace/api/node_modules
     restart: unless-stopped
 
   web:
@@ -94,9 +96,13 @@ services:
       NEXT_PUBLIC_API_TOKEN: ${DEV_AUTH_TOKEN:-dev-local-token}
     volumes:
       - ./:/workspace
+      - web_node_modules:/workspace/web/node_modules
     ports:
       - "${WEB_HOST_PORT:-3000}:3000"
     restart: unless-stopped
 
 volumes:
   pgdata:
+  api_node_modules:
+  worker_node_modules:
+  web_node_modules:

@@ -36,10 +36,9 @@
  * Source: computation_graph.json → node_balance_sheet
  */
 
-import { db } from '../../db';
-import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
 import { logger } from '../../lib/logger';
+import { replaceProjectionMetric } from '../projections';
 
 export async function executeBalanceSheet(
   ctx: ComputeContext,
@@ -166,24 +165,7 @@ export async function executeBalanceSheet(
     };
 
     for (const [metric_name, value] of Object.entries(bsMetrics)) {
-      await db.query(
-        `INSERT INTO balance_sheet_projections
-           (id, company_id, scenario_id, version_id, period_id, compute_run_id,
-            metric_name, value, currency, is_provisional, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'AED', false, NOW(), NOW())
-         ON CONFLICT (company_id, scenario_id, version_id, period_id, compute_run_id, metric_name)
-         DO UPDATE SET value = $8, updated_at = NOW()`,
-        [
-          uuidv4(),
-          ctx.company_id,
-          ctx.scenario_id,
-          ctx.version_id,
-          pid,
-          ctx.run_id,
-          metric_name,
-          value,
-        ]
-      );
+      await replaceProjectionMetric('balance_sheet_projections', ctx, pid, metric_name, value);
     }
 
     logger.info(

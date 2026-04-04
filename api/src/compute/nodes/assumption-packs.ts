@@ -160,20 +160,38 @@ export async function executeAssumptionPacks(
   const assumptions = new ResolvedAssumptions();
 
   // ── Step 1: Load assumption packs bound to the active assumption set ────
-  // The compute context always carries an assumption_set_id. Restricting pack
-  // resolution to that set prevents unrelated active packs for the same
-  // company from shadowing the scenario-specific bindings we actually want.
+  // Canonical SpecOS links packs to assumption sets through
+  // assumption_pack_bindings. We prefer that path, then fall back to the
+  // compatibility alias column added by migration 004 for older local DBs.
   const packsResult = await db.query(
     `SELECT ap.id AS pack_id
      FROM assumption_packs ap
+     JOIN assumption_pack_bindings apb
+       ON apb.pack_id = ap.id
      WHERE ap.company_id = $1
-       AND ap.status = 'active'
-       AND ap.assumption_set_id = $2
-     ORDER BY ap.assumption_family, ap.created_at DESC`,
+       AND apb.assumption_set_id = $2
+       AND ap.is_deleted = FALSE
+       AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
+     ORDER BY COALESCE(ap.assumption_family, ap.family), ap.created_at DESC`,
     [ctx.company_id, ctx.assumption_set_id]
   );
 
-  const packIds = packsResult.rows.map((r: any) => r.pack_id);
+  let packIds = packsResult.rows.map((r: any) => r.pack_id);
+
+  if (packIds.length === 0) {
+    const compatibilityPacks = await db.query(
+      `SELECT ap.id AS pack_id
+     FROM assumption_packs ap
+     WHERE ap.company_id = $1
+       AND ap.assumption_set_id = $2
+       AND ap.is_deleted = FALSE
+       AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
+     ORDER BY COALESCE(ap.assumption_family, ap.family), ap.created_at DESC`,
+      [ctx.company_id, ctx.assumption_set_id]
+    );
+
+    packIds = compatibilityPacks.rows.map((r: any) => r.pack_id);
+  }
 
   // ── Step 2-7: Load all field bindings with inheritance chain ────────────
   // Query assumption_field_bindings for all relevant packs
@@ -188,14 +206,15 @@ export async function executeAssumptionPacks(
               afb.unit,
               afb.is_override,
               afb.pack_id
-       FROM assumption_field_bindings afb
+      FROM assumption_field_bindings afb
        WHERE afb.pack_id = ANY($1)
        ORDER BY afb.is_override DESC, afb.created_at DESC`,
       [packIds]
     );
   } else {
     // Fallback: keep the same assumption-set boundary even when the initial
-    // pack lookup returned no active packs.
+    // pack lookup returned no linked packs. Prefer the canonical pack-binding
+    // join, then tolerate the compatibility alias column for older local DBs.
     bindingsResult = await db.query(
       `SELECT afb.variable_name,
               afb.grain_signature,
@@ -205,12 +224,33 @@ export async function executeAssumptionPacks(
               afb.pack_id
        FROM assumption_field_bindings afb
        JOIN assumption_packs ap ON ap.id = afb.pack_id
+       JOIN assumption_pack_bindings apb ON apb.pack_id = ap.id
        WHERE ap.company_id = $1
-         AND ap.assumption_set_id = $2
-         AND ap.status = 'active'
+         AND apb.assumption_set_id = $2
+         AND ap.is_deleted = FALSE
+         AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
        ORDER BY afb.is_override DESC, afb.created_at DESC`,
       [ctx.company_id, ctx.assumption_set_id]
     );
+
+    if (bindingsResult.rowCount === 0) {
+      bindingsResult = await db.query(
+        `SELECT afb.variable_name,
+                afb.grain_signature,
+                afb.value,
+                afb.unit,
+                afb.is_override,
+                afb.pack_id
+         FROM assumption_field_bindings afb
+         JOIN assumption_packs ap ON ap.id = afb.pack_id
+         WHERE ap.company_id = $1
+           AND ap.assumption_set_id = $2
+           AND ap.is_deleted = FALSE
+           AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
+         ORDER BY afb.is_override DESC, afb.created_at DESC`,
+        [ctx.company_id, ctx.assumption_set_id]
+      );
+    }
   }
 
   // ── Process bindings into ResolvedAssumptions ───────────────────────────

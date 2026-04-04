@@ -15,7 +15,7 @@ UPDATE assumption_packs
        pack_name = COALESCE(pack_name, name);
 
 WITH pack_links AS (
-  SELECT pack_id, MIN(assumption_set_id) AS assumption_set_id
+  SELECT pack_id, MIN(assumption_set_id::text)::uuid AS assumption_set_id
     FROM assumption_pack_bindings
    GROUP BY pack_id
 )
