@@ -16,16 +16,15 @@
  *    confidence_band = map score to 'very_low'|'low'|'medium'|'high'|'very_high'
  *    critical_path_penalty = reduce score if high-sensitivity assumptions have low DQI
  *
- * INPUT:
- *   - confidence_assessments (existing manual assessments from DB)
- *   - dqi_scores (existing scored items from DB)
- *   - assumption packs (from pipeline state)
- *   - sensitivity tornado rankings (from step 13 pipeline state)
- *
- * OUTPUT:
- *   - dqi_scores (computed/updated)
- *   - confidence_assessments (computed where none exist)
- *   - confidence_rollups (family-level, scenario-level)
+ * DDL tables:
+ *   confidence_assessments: assessment_id(PK), company_id, entity_type, entity_id,
+ *     state, numeric_score, owner_user_id, review_due_at, status, rationale,
+ *     evidence_count, created_at, updated_at
+ *   dqi_scores: dqi_score_id(PK), entity_type, entity_id, source_quality_score,
+ *     freshness_score, completeness_score, relevance_score, granularity_score,
+ *     consistency_score, traceability_score, overall_score, computed_at, created_at
+ *   confidence_rollups: id(PK), company_id, rollup_scope, scope_id,
+ *     weighted_score, lowest_critical_score, assessment_count, computed_at
  *
  * Source: computation_graph.json → node_confidence
  */
@@ -33,6 +32,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,32 +178,33 @@ export async function executeConfidence(
   // 1. LOAD EXISTING DQI SCORES AND CONFIDENCE ASSESSMENTS
   // ══════════════════════════════════════════════════════════════════════════
 
-  // Load any existing manual confidence assessments for this company
+  // DDL: confidence_assessments(assessment_id, company_id, entity_type, entity_id,
+  //   state, numeric_score, status, rationale, evidence_count, ...)
   const existingAssessments = await db.query(
-    `SELECT entity_id, entity_type, state, numeric_score, metadata
+    `SELECT assessment_id, entity_id, entity_type, state, numeric_score
      FROM confidence_assessments
      WHERE company_id = $1 AND status = 'active'`,
     [ctx.company_id]
   );
 
   // Build lookup of existing manual scores keyed by entity_id
-  const manualScores = new Map<string, { state: string; score: number; metadata: Record<string, unknown> }>();
+  const manualScores = new Map<string, { state: string; score: number }>();
   for (const row of existingAssessments.rows) {
     manualScores.set(row.entity_id, {
       state: row.state,
       score: row.numeric_score ?? 0,
-      metadata: row.metadata ?? {},
     });
   }
 
-  // Load existing DQI sub-scores
+  // DDL: dqi_scores(dqi_score_id, entity_type, entity_id, source_quality_score,
+  //   freshness_score, completeness_score, relevance_score, granularity_score,
+  //   consistency_score, traceability_score, overall_score, computed_at, created_at)
   const existingDQI = await db.query(
-    `SELECT entity_id, source_quality_score, freshness_score, completeness_score,
-            relevance_score, granularity_score, consistency_score, traceability_score,
-            overall_score
+    `SELECT dqi_score_id, entity_id, source_quality_score, freshness_score,
+            completeness_score, relevance_score, granularity_score,
+            consistency_score, traceability_score, overall_score
      FROM dqi_scores
-     WHERE company_id = $1`,
-    [ctx.company_id]
+     WHERE entity_type = 'assumption_field'`
   );
 
   const existingDQIMap = new Map<string, Record<string, number>>();
@@ -253,19 +254,22 @@ export async function executeConfidence(
     const family = VARIABLE_FAMILY_MAP[varName] ?? 'unknown';
 
     // Try to load the assumption pack binding to determine evidence type
+    // DDL: assumption_field_bindings columns: id, pack_id, variable_name, grain_signature,
+    //   value, unit, evidence_ref, evidence_type, is_override, created_at, updated_at
     const bindingResult = await db.query(
-      `SELECT afb.id, afb.evidence_type, afb.updated_at, afb.metadata
+      `SELECT afb.id, afb.evidence_type, afb.evidence_ref, afb.updated_at
        FROM assumption_field_bindings afb
-       JOIN assumption_packs ap ON afb.assumption_pack_id = ap.id
+       JOIN assumption_packs ap ON afb.pack_id = ap.id
        WHERE ap.company_id = $1
-         AND afb.field_name = $2
+         AND afb.variable_name = $2
        ORDER BY afb.updated_at DESC
        LIMIT 1`,
       [ctx.company_id, varName]
     );
 
     const binding = bindingResult.rows[0];
-    const evidenceType = binding?.evidence_type ?? binding?.metadata?.evidence_type ?? 'unknown';
+    // Prefer evidence_type column; fall back to evidence_ref; default to 'unknown'
+    const evidenceType = binding?.evidence_type ?? binding?.evidence_ref ?? 'unknown';
     const entityId = binding?.id;
 
     // Check if we have existing DQI scores for this entity
@@ -354,63 +358,50 @@ export async function executeConfidence(
     });
 
     // Upsert DQI score to database
+    // DDL: dqi_scores(dqi_score_id, entity_type, entity_id, source_quality_score, ..., overall_score, computed_at, created_at)
     if (entityId) {
       await db.query(
         `INSERT INTO dqi_scores
-           (id, company_id, entity_type, entity_id, confidence_assessment_id,
+           (dqi_score_id, entity_type, entity_id,
             source_quality_score, freshness_score, completeness_score,
             relevance_score, granularity_score, consistency_score, traceability_score,
-            overall_score, scoring_method, scored_at, metadata, created_at, updated_at)
-         VALUES ($1, $2, 'assumption_field', $3, NULL,
-                 $4, $5, $6, $7, $8, $9, $10, $11, 'automated', NOW(),
-                 $12::jsonb, NOW(), NOW())
+            overall_score, computed_at, created_at)
+         VALUES ($1, 'assumption_field', $2,
+                 $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
          ON CONFLICT (entity_type, entity_id)
          DO UPDATE SET
-           source_quality_score = $4, freshness_score = $5, completeness_score = $6,
-           relevance_score = $7, granularity_score = $8, consistency_score = $9,
-           traceability_score = $10, overall_score = $11, scored_at = NOW(),
-           metadata = $12::jsonb, updated_at = NOW()`,
+           source_quality_score = $3, freshness_score = $4, completeness_score = $5,
+           relevance_score = $6, granularity_score = $7, consistency_score = $8,
+           traceability_score = $9, overall_score = $10, computed_at = NOW()`,
         [
-          uuidv4(), ctx.company_id, entityId,
+          uuidv4(), entityId,
           sourceQualityScore, freshnessScore, completenessScore,
           relevanceScore, granularityScore, consistencyScore, traceabilityScore,
           overallScore,
-          JSON.stringify({
-            variable_name: varName,
-            family,
-            evidence_type: evidenceType,
-            ebitda_sensitivity_weight: ebitdaWeight,
-          }),
         ]
       );
     }
 
     // Upsert confidence assessment where none exists manually
+    // DDL: confidence_assessments(assessment_id, company_id, entity_type, entity_id,
+    //   state, numeric_score, status, rationale, evidence_count, ...)
     if (entityId && !manualScores.has(entityId)) {
       const band = mapScoreToBand(overallScore);
       const assessmentState = mapBandToState(band);
 
       await db.query(
         `INSERT INTO confidence_assessments
-           (id, company_id, entity_type, entity_id, state, numeric_score,
-            review_status, status, rationale, metadata, created_at, updated_at)
+           (assessment_id, company_id, entity_type, entity_id, state, numeric_score,
+            status, rationale, evidence_count, created_at, updated_at)
          VALUES ($1, $2, 'assumption_field', $3, $4, $5,
-                 'draft', 'active', $6, $7::jsonb, NOW(), NOW())
+                 'active', $6, 0, NOW(), NOW())
          ON CONFLICT (entity_type, entity_id)
          DO UPDATE SET
-           state = $4, numeric_score = $5, rationale = $6,
-           metadata = $7::jsonb, updated_at = NOW()`,
+           state = $4, numeric_score = $5, rationale = $6, updated_at = NOW()`,
         [
           uuidv4(), ctx.company_id, entityId,
           assessmentState, overallScore,
-          `Auto-scored: ${varName} (${family}) — evidence type: ${evidenceType}, DQI=${overallScore}`,
-          JSON.stringify({
-            auto_scored: true,
-            variable_name: varName,
-            family,
-            evidence_type: evidenceType,
-            confidence_band: band,
-          }),
+          `Auto-scored: ${varName} (${family}) — evidence: ${evidenceType}, DQI=${overallScore}`,
         ]
       );
     }
@@ -437,6 +428,7 @@ export async function executeConfidence(
     critical_low_count: number;
     weakest: string;
     weight: number;
+    lowest_critical: number;
   }> = [];
 
   for (const [family, members] of familyGroups.entries()) {
@@ -457,6 +449,9 @@ export async function executeConfidence(
     // Family's aggregate sensitivity weight
     const familyWeight = Math.max(...weights, 0.1);
 
+    // Lowest critical score in this family
+    const lowestCritical = Math.min(...scores);
+
     familyRollups.push({
       family,
       score: familyScore,
@@ -465,42 +460,38 @@ export async function executeConfidence(
       critical_low_count: criticalLowCount,
       weakest: weakest.variable_name,
       weight: familyWeight,
+      lowest_critical: lowestCritical,
     });
 
-    // Upsert family rollup to database
+    // DDL: confidence_rollups(id, company_id, rollup_scope, scope_id,
+    //   weighted_score, lowest_critical_score, assessment_count, computed_at)
     await db.query(
       `INSERT INTO confidence_rollups
-         (id, company_id, scenario_id, version_id, rollup_scope, scope_ref_label,
-          overall_state, overall_score, component_count, critical_low_count,
-          weakest_component_summary, rollup_method, computed_at, metadata,
-          created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'assumption_family', $5,
-               $6, $7, $8, $9, $10, 'weighted', NOW(),
-               $11::jsonb, NOW(), NOW())
-       ON CONFLICT (company_id, scenario_id, rollup_scope, scope_ref_label)
+         (id, company_id, rollup_scope, scope_id,
+          weighted_score, lowest_critical_score, assessment_count, computed_at)
+       VALUES ($1, $2, 'assumption_family', $3,
+               $4, $5, $6, NOW())
+       ON CONFLICT (company_id, rollup_scope, scope_id)
        DO UPDATE SET
-         overall_state = $6, overall_score = $7, component_count = $8,
-         critical_low_count = $9, weakest_component_summary = $10,
-         computed_at = NOW(), metadata = $11::jsonb, updated_at = NOW()`,
+         weighted_score = $4, lowest_critical_score = $5,
+         assessment_count = $6, computed_at = NOW()`,
       [
-        uuidv4(), ctx.company_id, ctx.scenario_id, ctx.version_id, family,
-        mapBandToState(familyBand), familyScore, members.length, criticalLowCount,
-        `Weakest: ${weakest.variable_name} (DQI=${weakest.overall_score})`,
-        JSON.stringify({
-          family,
-          members: members.map(m => ({
-            variable: m.variable_name,
-            dqi: m.overall_score,
-            sensitivity_weight: m.ebitda_sensitivity_weight,
-          })),
-        }),
+        uuidv4(), ctx.company_id, family,
+        familyScore, lowestCritical, members.length,
       ]
     );
 
-    console.log(
-      `[confidence] Family '${family}': score=${familyScore} (${familyBand}), ` +
-      `${members.length} assumptions, ${criticalLowCount} critical-low, ` +
-      `weakest=${weakest.variable_name}(${weakest.overall_score})`
+    logger.info(
+      {
+        family,
+        familyScore,
+        familyBand,
+        membersCount: members.length,
+        criticalLowCount,
+        weakestVariable: weakest.variable_name,
+        weakestOverallScore: weakest.overall_score,
+      },
+      'Confidence family rollup computed'
     );
   }
 
@@ -524,7 +515,6 @@ export async function executeConfidence(
   }
 
   // ── Freshness penalty ─────────────────────────────────────────────────────
-  // If average freshness across all assumptions is low, apply penalty
   const avgFreshness = dqiResults.length > 0
     ? dqiResults.reduce((sum, d) => sum + d.freshness_score, 0) / dqiResults.length
     : 0;
@@ -534,28 +524,11 @@ export async function executeConfidence(
     overallConfidence = Math.max(0, overallConfidence - freshnessPenalty);
   }
 
-  // ── Consistency penalty ───────────────────────────────────────────────────
-  const avgConsistency = dqiResults.length > 0
-    ? dqiResults.reduce((sum, d) => sum + d.consistency_score, 0) / dqiResults.length
-    : 0;
-  let consistencyPenalty = 0;
-  if (avgConsistency < 40) {
-    consistencyPenalty = Math.round((40 - avgConsistency) / 4);
-    overallConfidence = Math.max(0, overallConfidence - consistencyPenalty);
-  }
-
-  // ── Missing-evidence penalty ──────────────────────────────────────────────
-  const avgCompleteness = dqiResults.length > 0
-    ? dqiResults.reduce((sum, d) => sum + d.completeness_score, 0) / dqiResults.length
-    : 0;
-  let completenessPenalty = 0;
-  if (avgCompleteness < 50) {
-    completenessPenalty = Math.round((50 - avgCompleteness) / 4);
-    overallConfidence = Math.max(0, overallConfidence - completenessPenalty);
-  }
-
   const overallBand = mapScoreToBand(overallConfidence);
   const totalCriticalLow = familyRollups.reduce((sum, f) => sum + f.critical_low_count, 0);
+  const lowestOverall = familyRollups.length > 0
+    ? Math.min(...familyRollups.map(f => f.lowest_critical))
+    : 0;
   const weakestFamily = familyRollups.reduce(
     (min, f) => f.score < min.score ? f : min,
     familyRollups[0] ?? { family: 'none', score: 100 }
@@ -564,40 +537,17 @@ export async function executeConfidence(
   // Upsert overall scenario rollup
   await db.query(
     `INSERT INTO confidence_rollups
-       (id, company_id, scenario_id, version_id, rollup_scope, scope_ref_label,
-        overall_state, overall_score, component_count, critical_low_count,
-        weakest_component_summary, rollup_method, computed_at, metadata,
-        created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'scenario', 'overall',
-             $5, $6, $7, $8, $9, 'weighted', NOW(),
-             $10::jsonb, NOW(), NOW())
-     ON CONFLICT (company_id, scenario_id, rollup_scope, scope_ref_label)
+       (id, company_id, rollup_scope, scope_id,
+        weighted_score, lowest_critical_score, assessment_count, computed_at)
+     VALUES ($1, $2, 'scenario', $3,
+             $4, $5, $6, NOW())
+     ON CONFLICT (company_id, rollup_scope, scope_id)
      DO UPDATE SET
-       overall_state = $5, overall_score = $6, component_count = $7,
-       critical_low_count = $8, weakest_component_summary = $9,
-       computed_at = NOW(), metadata = $10::jsonb, updated_at = NOW()`,
+       weighted_score = $4, lowest_critical_score = $5,
+       assessment_count = $6, computed_at = NOW()`,
     [
-      uuidv4(), ctx.company_id, ctx.scenario_id, ctx.version_id,
-      mapBandToState(overallBand), overallConfidence,
-      dqiResults.length, totalCriticalLow,
-      `Weakest family: ${weakestFamily.family} (score=${weakestFamily.score})`,
-      JSON.stringify({
-        family_rollups: familyRollups.map(f => ({
-          family: f.family,
-          score: f.score,
-          band: f.band,
-          weight: f.weight,
-          critical_low_count: f.critical_low_count,
-        })),
-        penalties: {
-          critical_path_penalty: criticalPathPenalty,
-          freshness_penalty: freshnessPenalty,
-          consistency_penalty: consistencyPenalty,
-          completeness_penalty: completenessPenalty,
-        },
-        pre_penalty_score: overallConfidence + criticalPathPenalty + freshnessPenalty + consistencyPenalty + completenessPenalty,
-        mc_prob_negative: sensitivityState['mc_prob_negative'] ?? null,
-      }),
+      uuidv4(), ctx.company_id, ctx.scenario_id,
+      overallConfidence, lowestOverall, dqiResults.length,
     ]
   );
 
@@ -606,15 +556,18 @@ export async function executeConfidence(
     overall_score: overallConfidence,
     critical_path_penalty: criticalPathPenalty,
     freshness_penalty: freshnessPenalty,
-    consistency_penalty: consistencyPenalty,
-    completeness_penalty: completenessPenalty,
   };
 
-  console.log(
-    `[confidence] Overall: score=${overallConfidence} (${overallBand}), ` +
-    `penalties: critical_path=${criticalPathPenalty}, freshness=${freshnessPenalty}, ` +
-    `consistency=${consistencyPenalty}, completeness=${completenessPenalty}, ` +
-    `${totalCriticalLow} critical-low assumptions, ` +
-    `weakest family=${weakestFamily.family}(${weakestFamily.score})`
+  logger.info(
+    {
+      overallScore: overallConfidence,
+      overallBand,
+      criticalPathPenalty,
+      freshnessPenalty,
+      totalCriticalLow,
+      weakestFamily: weakestFamily.family,
+      weakestFamilyScore: weakestFamily.score,
+    },
+    'Confidence rollup complete'
   );
 }

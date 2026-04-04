@@ -8,10 +8,17 @@
  * Fail-fast: decisions must resolve before assumptions bind.
  *
  * Source: computation_graph.json → node_decisions
+ *
+ * DDL table: decision_records
+ * Columns: id, company_id, scenario_id, version_id, family (decision_family),
+ *   status (governance_status), scope_bundle_id, title, rationale_summary,
+ *   owner_user_id, effective_period_id, effective_to_period_id,
+ *   metadata, is_deleted, created_at, updated_at
  */
 
 import { db } from '../../db';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeDecisions(
   ctx: ComputeContext,
@@ -23,16 +30,18 @@ export async function executeDecisions(
 
   // ── Step 1-4: Resolve decisions across all families ─────────────────────
   // Decision families: product, market, marketing, operations
-  // Only decisions with lifecycle state 'accepted' or 'activated' enter compute
+  // Only decisions with status 'accepted' or 'activated' enter compute
+  // DDL: decision_records columns: family (decision_family enum), status (governance_status)
   const decisionsResult = await db.query(
-    `SELECT d.id, d.decision_family, d.decision_type, d.title,
-            d.lifecycle_state, d.scope_bundle_id, d.effective_period_start,
-            d.effective_period_end, d.metadata
-     FROM decisions d
+    `SELECT d.id, d.family, d.title,
+            d.status, d.scope_bundle_id,
+            d.effective_period_id, d.effective_to_period_id,
+            d.metadata
+     FROM decision_records d
      WHERE d.company_id = $1
        AND d.scenario_id = $2
-       AND d.lifecycle_state IN ('accepted', 'activated')
-     ORDER BY d.decision_family, d.created_at ASC`,
+       AND d.status IN ('accepted', 'activated')
+     ORDER BY d.family, d.created_at ASC`,
     [ctx.company_id, ctx.scenario_id]
   );
 
@@ -42,18 +51,26 @@ export async function executeDecisions(
   // Decisions in draft/rejected state are excluded (already filtered above)
   // Log decisions that were excluded
   const excludedResult = await db.query(
-    `SELECT id, decision_family, lifecycle_state, title
-     FROM decisions
+    `SELECT id, family, status, title
+     FROM decision_records
      WHERE company_id = $1
        AND scenario_id = $2
-       AND lifecycle_state NOT IN ('accepted', 'activated')`,
+       AND status NOT IN ('accepted', 'activated')`,
     [ctx.company_id, ctx.scenario_id]
   );
 
   if (excludedResult.rows.length > 0) {
-    console.log(
-      `[decisions] Excluded ${excludedResult.rows.length} decisions with non-compute lifecycle states: ` +
-      excludedResult.rows.map((r: any) => `${r.title}(${r.lifecycle_state})`).join(', ')
+    logger.info(
+      {
+        excludedCount: excludedResult.rows.length,
+        excluded: excludedResult.rows.map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          status: r.status,
+          family: r.family,
+        })),
+      },
+      'Excluded decisions with non-compute statuses'
     );
   }
 
@@ -61,7 +78,7 @@ export async function executeDecisions(
   // Validate no conflicting decisions within same scope/period
   const decisionsByFamily: Record<string, any[]> = {};
   for (const decision of activeDecisions) {
-    const family = decision.decision_family || 'unknown';
+    const family = decision.family || 'unknown';
     if (!decisionsByFamily[family]) {
       decisionsByFamily[family] = [];
     }
@@ -71,6 +88,14 @@ export async function executeDecisions(
   // Check for scope conflicts within each family
   for (const [family, decisions] of Object.entries(decisionsByFamily)) {
     if (decisions.length > 1) {
+      // Build a period-date lookup from the planning spine for real date-based overlap checks
+      const periodDateMap = new Map<string, { start: string; end: string }>();
+      if (state.planning_spine?.periods) {
+        for (const p of state.planning_spine.periods) {
+          periodDateMap.set(p.period_id, { start: p.start_date, end: p.end_date });
+        }
+      }
+
       // Check overlapping effective periods within same family
       for (let i = 0; i < decisions.length; i++) {
         for (let j = i + 1; j < decisions.length; j++) {
@@ -79,19 +104,32 @@ export async function executeDecisions(
 
           if (
             d1.scope_bundle_id === d2.scope_bundle_id &&
-            d1.effective_period_start &&
-            d2.effective_period_start &&
-            d1.effective_period_end &&
-            d2.effective_period_end
+            d1.effective_period_id &&
+            d2.effective_period_id &&
+            d1.effective_to_period_id &&
+            d2.effective_to_period_id
           ) {
-            const overlap =
-              d1.effective_period_start <= d2.effective_period_end &&
-              d2.effective_period_start <= d1.effective_period_end;
+            // Resolve period UUIDs to actual dates for overlap comparison
+            const d1Start = periodDateMap.get(d1.effective_period_id);
+            const d1End = periodDateMap.get(d1.effective_to_period_id);
+            const d2Start = periodDateMap.get(d2.effective_period_id);
+            const d2End = periodDateMap.get(d2.effective_to_period_id);
 
-            if (overlap) {
-              console.warn(
-                `[decisions] Potential conflict in ${family} family: ` +
-                `'${d1.title}' and '${d2.title}' have overlapping effective periods`
+            // If we can resolve dates, do a real overlap check; otherwise flag conservatively
+            const hasOverlap =
+              d1Start && d1End && d2Start && d2End
+                ? new Date(d1Start.start) <= new Date(d2End.end) &&
+                  new Date(d2Start.start) <= new Date(d1End.end)
+                : true; // conservative: flag if we can't resolve dates
+
+            if (hasOverlap) {
+              logger.warn(
+                {
+                  family,
+                  decision_a: { id: d1.id, title: d1.title, scope_bundle_id: d1.scope_bundle_id },
+                  decision_b: { id: d2.id, title: d2.title, scope_bundle_id: d2.scope_bundle_id },
+                },
+                'Potential conflict: decisions share same scope bundle and overlap'
               );
             }
           }
@@ -107,10 +145,14 @@ export async function executeDecisions(
       decision.scope_bundle_id &&
       decision.scope_bundle_id !== state.scope_bundle.scope_bundle_id
     ) {
-      console.warn(
-        `[decisions] Decision '${decision.title}' (${decision.id}) references ` +
-        `scope_bundle_id=${decision.scope_bundle_id} which differs from active ` +
-        `scope bundle ${state.scope_bundle.scope_bundle_id}`
+      logger.warn(
+        {
+          decisionId: decision.id,
+          decisionTitle: decision.title,
+          decisionScopeBundleId: decision.scope_bundle_id,
+          activeScopeBundleId: state.scope_bundle.scope_bundle_id,
+        },
+        'Decision references scope bundle that differs from active scope bundle'
       );
     }
   }
@@ -120,10 +162,9 @@ export async function executeDecisions(
   for (const [family, decisions] of Object.entries(decisionsByFamily)) {
     decisionState[family] = decisions.map((d: any) => ({
       id: d.id,
-      type: d.decision_type,
       title: d.title,
-      effective_start: d.effective_period_start,
-      effective_end: d.effective_period_end,
+      effective_period_id: d.effective_period_id,
+      effective_to_period_id: d.effective_to_period_id,
     }));
   }
 
@@ -132,11 +173,13 @@ export async function executeDecisions(
     decision_state: decisionState,
   };
 
-  console.log(
-    `[decisions] Resolved ${activeDecisions.length} active decisions across ` +
-    `${Object.keys(decisionsByFamily).length} families: ` +
-    Object.entries(decisionsByFamily)
-      .map(([family, decs]) => `${family}(${decs.length})`)
-      .join(', ')
+  logger.info(
+    {
+      activeDecisionsCount: activeDecisions.length,
+      families: Object.fromEntries(
+        Object.entries(decisionsByFamily).map(([family, decs]) => [family, decs.length])
+      ),
+    },
+    'Decisions resolved'
   );
 }
