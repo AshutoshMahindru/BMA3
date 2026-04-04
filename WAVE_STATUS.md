@@ -27,7 +27,7 @@ original Wave 1-only state:
 - Local runtime is PostgreSQL-only by default with `npm run smoke:canonical`
 - No active legacy frontend boundary remains on the dashboard surfaces; Wave 5
   hardening is now closed, and the remaining repo work is post-wave parity
-  cleanup plus assumptions-surface behavior completion
+  cleanup plus financial reconciliation cleanup on the seeded base scenario
 
 ## Wave Status
 
@@ -69,7 +69,7 @@ original Wave 1-only state:
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/routes/v1/context.ts` | **DONE** | `api_contracts.json` context |
-| `api/src/routes/v1/assumptions.ts` | **DONE** | `api_contracts.json` assumptions (route surface complete; packs/apply/override behavior still partially stubbed) |
+| `api/src/routes/v1/assumptions.ts` | **DONE** | `api_contracts.json` assumptions — sets, packs, pack apply, family reads/writes, and overrides live on canonical assumption-pack tables |
 | `api/src/routes/v1/financials.ts` | **DONE** | `api_contracts.json` financials |
 | `api/src/compute/orchestrator.ts` | **DONE** | `computation_graph.json` — 18-step sequencer |
 | `api/src/compute/nodes/planning-spine.ts` | **DONE** | node 1 — DDL-aligned (plan_versions) |
@@ -110,7 +110,7 @@ original Wave 1-only state:
 | Core finance screens rewired | **DONE** | `traceability.json` |
 | `web/app/dashboard/risk/page.tsx` | **DONE** | canonical `analysis/risk` |
 | `web/app/dashboard/simulations/page.tsx` | **DONE** | canonical `analysis/simulation-runs` |
-| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions API live for the currently wired subset; pack/apply + override flows still depend on partially stubbed backend surfaces |
+| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions API live for the wired subset; backend pack/apply + override flows now persist against assumption-pack tables |
 | `web/app/dashboard/markets/page.tsx` | **DONE** | canonical `decisions/markets` API |
 | `web/app/dashboard/analysis/compare/page.tsx` | **DONE** | canonical Scenario Comparison Console route |
 | `web/app/dashboard/scope/page.tsx` | **DONE** | canonical scope route index |
@@ -176,9 +176,9 @@ All Wave 4 blocking legacy files have been resolved:
 Wave 5 also removed the remaining stub data files under `web/lib/data/`, so the
 dashboard surfaces no longer depend on static `.ts` data shims.
 
-One remaining product caveat sits outside the Wave 5 gate: the assumptions
-router still exposes partially stubbed `/packs`, `/packs/:packId/apply`, and
-`/overrides` behavior, so route-count parity is ahead of behavior parity there.
+One remaining product caveat sits outside the Wave 5 gate: the seeded base
+scenario still emits balance-sheet reconciliation warnings during compute steps
+11 and 16, so runtime parity is ahead of seeded-financial cleanup there.
 
 ## Compliance Snapshot
 
@@ -216,3 +216,4 @@ Last verified after compose runtime closure:
 | 21 | 2026-04-05 | AI + infra + routed-page gap closure | Implemented the missing SpecOS `/api/v1/ai` router (`edit-suggestions`, `analyze`, `explain`, `research-draft`) and registered it in `server.ts`; added BullMQ + Redis queue infrastructure, a compute worker runtime, `node-pg-migrate` tooling, and an expanded `docker-compose.yml` that defines Postgres + Redis + API + worker + web. Added routed frontend surfaces for the Scenario Comparison Console, scope dimension editor family, and Scenario Wizard, plus Playwright E2E coverage over those live flows. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand` (`119/119`), `npm run test:e2e` (`3/3`), `docker compose config`, and `python3 scripts/spec-compliance.py`. Local `docker compose up` remains unverified because the Docker daemon was unavailable in this session. | compliant, 0 failures |
 | 22 | 2026-04-05 | Post-Wave frontend parity closure | Implemented the missing routed Scope Review and Compute Center surfaces, switched the scope validation endpoint back to the SpecOS contract shape (`scopeBundleId` only), added canonical Next route aliases for `/dashboard/cash-flow`, `/dashboard/capital-strategy`, and `/dashboard/simulation`, and expanded Playwright dashboard coverage from `3/3` to `5/5`. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand`, `npm run test:e2e`, and `python3 scripts/spec-compliance.py`. Docker runtime verification remains the only open Wave 5 gate. | compliant, 0 failures |
 | 23 | 2026-04-05 | Wave 5 runtime closure | Fixed live async compute blockers across assumption-pack resolution, projection persistence, and confidence rollups; added bootstrap migration `005` for canonical assumption packs/bindings; verified `npm run migrate:up`; proved host-run and compose-hosted queued compute both complete all 18 steps; and fixed `docker-compose.yml` to use container-native `node_modules` volumes so Linux containers no longer crash on macOS host binaries. Also re-verified the already-landed AI SME overlays (executive + P&L), bringing Playwright dashboard coverage to `7/7` locally. Wave 5 gate is now closed; remaining follow-up work is assumptions API behavior completion and financial reconciliation cleanup. | compliant, 0 failures |
+| 24 | 2026-04-05 | Post-Wave assumptions behavior closure | Replaced the remaining stubbed assumptions handlers with live SQL-backed behavior on `assumption_packs`, `assumption_pack_bindings`, `assumption_field_bindings`, and `assumption_override_log`. `/packs`, `/packs/:packId/apply`, family reads/writes, and `/overrides` now resolve against the active assumption set, persist updates for compute, and expose live contract responses. Added contract coverage for demand reads, funding bulk upserts, pack apply, and overrides. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand` (`123/123`), and `python3 scripts/spec-compliance.py` (`9/9`, 0 warnings). | compliant, 0 failures |

@@ -183,4 +183,226 @@ describe('API contracts', () => {
     });
     expect(payload.meta?.advisoryOnly).toBe(true);
   });
+
+  it('serves live assumption family rows from field bindings', async () => {
+    mockedQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM companies')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '10000000-0000-4000-8000-000000000111',
+              tenant_id: '10000000-0000-4000-8000-000000000001',
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM assumption_sets aset') && sql.includes('ORDER BY aset.updated_at DESC')) {
+        return {
+          rowCount: 1,
+          rows: [{ id: '30000000-0000-4000-8000-000000000111' }],
+        };
+      }
+      if (sql.includes('SELECT DISTINCT ON (afb.variable_name')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '40000000-0000-4000-8000-000000000111',
+              variable_name: 'gross_demand',
+              value: '5000',
+              unit: 'count',
+              grain_signature: {},
+              pack_name: 'Demand assumptions',
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected query in assumptions demand test: ${sql}`);
+    });
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/assumptions/demand?companyId=10000000-0000-4000-8000-000000000111&scenarioId=20000000-0000-4000-8000-000000000111`,
+      {
+        headers: {
+          Authorization: 'Bearer dev-local-token',
+        },
+      },
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.data).toEqual([
+      {
+        fieldId: '40000000-0000-4000-8000-000000000111',
+        name: 'Gross Demand',
+        value: 5000,
+        unit: 'count',
+        periodId: '',
+        confidence: 'medium',
+        source: 'Demand assumptions',
+        variableName: 'gross_demand',
+        grainSignature: {},
+      },
+    ]);
+  });
+
+  it('upserts funding assumptions through the canonical bulk route', async () => {
+    mockedQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('FROM companies')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '10000000-0000-4000-8000-000000000111',
+              tenant_id: '10000000-0000-4000-8000-000000000001',
+            },
+          ],
+        };
+      }
+      if (sql.includes('FROM assumption_sets aset') && sql.includes('ORDER BY aset.updated_at DESC')) {
+        return {
+          rowCount: 1,
+          rows: [{ id: '30000000-0000-4000-8000-000000000111' }],
+        };
+      }
+      if (sql.includes('FROM assumption_field_bindings afb') && sql.includes('WHERE afb.id = ANY($1)')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '40000000-0000-4000-8000-000000000111',
+              variable_name: 'minimum_cash_buffer',
+              unit: 'currency',
+              grain_signature: {},
+              assumption_family: 'funding',
+            },
+          ],
+        };
+      }
+      if (sql.includes('UPDATE assumption_field_bindings')) {
+        return { rowCount: 1, rows: [] };
+      }
+      throw new Error(`Unexpected query in funding bulk test: ${sql}`);
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/assumptions/funding/bulk`, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'Bearer dev-local-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        companyId: '10000000-0000-4000-8000-000000000111',
+        scenarioId: '20000000-0000-4000-8000-000000000111',
+        updates: [
+          {
+            fieldId: '40000000-0000-4000-8000-000000000111',
+            variableName: 'minimum_cash_buffer',
+            value: 125000,
+            unit: 'currency',
+          },
+        ],
+      }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.data).toEqual({
+      updated: 1,
+      skipped: 0,
+      errors: [],
+    });
+  });
+
+  it('applies packs to a target assumption set', async () => {
+    mockedQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT ap.id,') && sql.includes('COUNT(afb.id)::int AS field_count')) {
+        return {
+          rowCount: 1,
+          rows: [{ id: '50000000-0000-4000-8000-000000000111', field_count: 3 }],
+        };
+      }
+      if (sql.includes('FROM assumption_pack_bindings')) {
+        return { rowCount: 0, rows: [] };
+      }
+      if (sql.includes('INSERT INTO assumption_pack_bindings')) {
+        return { rowCount: 1, rows: [] };
+      }
+      throw new Error(`Unexpected query in pack apply test: ${sql}`);
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/assumptions/packs/50000000-0000-4000-8000-000000000111/apply`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer dev-local-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        targetSetId: '30000000-0000-4000-8000-000000000111',
+      }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.data).toEqual({
+      applied: true,
+      fieldsApplied: 3,
+    });
+  });
+
+  it('creates assumption overrides against live field bindings', async () => {
+    mockedQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT afb.id,') && sql.includes('FROM assumption_field_bindings afb')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '40000000-0000-4000-8000-000000000111',
+              variable_name: 'gross_demand',
+              value: '5000',
+              unit: 'count',
+            },
+          ],
+        };
+      }
+      if (sql.includes('UPDATE assumption_field_bindings')) {
+        return { rowCount: 1, rows: [] };
+      }
+      if (sql.includes('INSERT INTO assumption_override_log')) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: '60000000-0000-4000-8000-000000000111',
+              created_at: '2026-04-05T10:00:00.000Z',
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected query in overrides test: ${sql}`);
+    });
+
+    const response = await fetch(`${baseUrl}/api/v1/assumptions/overrides`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer dev-local-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fieldId: '40000000-0000-4000-8000-000000000111',
+        overrideValue: 5400,
+        reason: 'Adjusted for fresh demand evidence',
+      }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(payload.data).toEqual({
+      overrideId: '60000000-0000-4000-8000-000000000111',
+      fieldId: '40000000-0000-4000-8000-000000000111',
+      overrideValue: 5400,
+      createdAt: '2026-04-05T10:00:00.000Z',
+    });
+  });
 });
