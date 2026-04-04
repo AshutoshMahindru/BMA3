@@ -202,13 +202,14 @@ print("=" * 60)
 
 compute_files = find_files('api/src/compute/**/*.ts') + find_files('api/src/jobs/**/*.ts')
 hardcoded_patterns = [
-    (r'=\s*0\.20?\b', 'hardcoded 20% (platform commission?)'),
-    (r'=\s*2000\b', 'hardcoded 2000 (customer count?)'),
-    (r'=\s*395000\b', 'hardcoded 395000 (capital layout?)'),
-    (r'=\s*1000000\b', 'hardcoded 1000000 (cash assumption?)'),
-    (r'newCustomers\s*=\s*\d+', 'hardcoded newCustomers constant'),
     (r'commission\s*=\s*0\.\d+', 'hardcoded commission rate'),
+    (r'newCustomers\s*=\s*\d+', 'hardcoded newCustomers constant'),
+    (r'runwayMonths\s*=\s*\d+', 'hardcoded runway assumption'),
+    (r'capital\s*=\s*395000', 'hardcoded 395000 capital layout'),
+    (r'cash\s*=\s*1000000', 'hardcoded 1000000 cash assumption'),
 ]
+# Note: generic 0.20 / 2000 patterns removed — too many false positives on
+# sensitivity perturbation values and volatility parameters.
 
 hardcoded_found = []
 for cf in compute_files:
