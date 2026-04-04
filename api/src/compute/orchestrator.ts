@@ -354,25 +354,48 @@ export async function executeComputePipeline(ctx: ComputeContext): Promise<Pipel
     financials: {},
   };
 
-  // Create compute_run record with status 'running'
-  await db.query(
-    `INSERT INTO compute_runs
-       (id, company_id, scenario_id, version_id, trigger_type, status,
-        started_at, run_config, metadata, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'pipeline', 'running', NOW(),
-             $5::jsonb, '{}'::jsonb, NOW(), NOW())`,
-    [
-      ctx.run_id,
-      ctx.company_id,
-      ctx.scenario_id,
-      ctx.version_id,
-      JSON.stringify({
-        assumption_set_id: ctx.assumption_set_id,
-        period_range: ctx.period_range,
-        tenant_id: ctx.tenant_id,
-      }),
-    ]
+  const runConfig = JSON.stringify({
+    assumption_set_id: ctx.assumption_set_id,
+    period_range: ctx.period_range,
+    tenant_id: ctx.tenant_id,
+  });
+
+  const existingRun = await db.query(
+    `SELECT id
+       FROM compute_runs
+      WHERE id = $1`,
+    [ctx.run_id],
   );
+
+  if (Number(existingRun.rowCount || 0) === 0) {
+    await db.query(
+      `INSERT INTO compute_runs
+         (id, company_id, scenario_id, version_id, trigger_type, status,
+          started_at, run_config, metadata, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'pipeline', 'running', NOW(),
+               $5::jsonb, '{}'::jsonb, NOW(), NOW())`,
+      [
+        ctx.run_id,
+        ctx.company_id,
+        ctx.scenario_id,
+        ctx.version_id,
+        runConfig,
+      ]
+    );
+  } else {
+    await db.query(
+      `UPDATE compute_runs
+          SET status = 'running',
+              started_at = COALESCE(started_at, NOW()),
+              completed_at = NULL,
+              error_message = NULL,
+              run_config = COALESCE(run_config, '{}'::jsonb) || $2::jsonb,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [ctx.run_id, runConfig],
+    );
+    await db.query(`DELETE FROM compute_run_steps WHERE compute_run_id = $1`, [ctx.run_id]);
+  }
 
   let pipelineFailed = false;
   let failedStep: StepDefinition | null = null;

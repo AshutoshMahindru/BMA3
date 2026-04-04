@@ -6,8 +6,9 @@
 | Item | Before | Now |
 |---|---|---|
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
-| Test count | 117 | **118** (+1 contract test for reference routes) |
-| Compliant code routes | 107 | **110** |
+| `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
+| Test count | 117 | **119** (+2 contract/integration tests on top of earlier route coverage) |
+| Compliant code routes | 107 | **114** |
 
 ---
 
@@ -17,14 +18,15 @@
 |---|---|
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
-| Test suite | **118/118 passing** |
-| Wave status | Wave 5 **PARTIAL** (3 items remain) |
+| Jest suite | **119/119 passing** |
+| Playwright E2E | **3/3 passing** |
+| Wave status | Wave 5 **PARTIAL** (Docker runtime verification pending locally) |
 
 ---
 
-## API Coverage: 4 Endpoints Still Missing
+## API Coverage: Fully Closed
 
-**Spec: 128 — Implemented: 124 — Gap: 4**
+**Spec: 128 — Implemented: 128 — Gap: 0**
 
 | Router file | Implemented | Spec | Gap |
 |---|---|---|---|
@@ -38,18 +40,7 @@
 | `confidence.ts` | 13 | 13 | 0 |
 | `governance.ts` | 12 | 12 | 0 |
 | `reference.ts` | 8 | 8 | 0 ✅ new |
-| `ai.ts` | 0 | 4 | **−4** (not created) |
-
-### Gap — `/api/v1/ai` router (4 missing, entire router absent)
-
-No `ai.ts` file exists and nothing is registered in `server.ts`.
-
-| Method | Spec path |
-|---|---|
-| `POST` | `/api/v1/ai/edit-suggestions` |
-| `POST` | `/api/v1/ai/analyze` |
-| `POST` | `/api/v1/ai/explain` |
-| `POST` | `/api/v1/ai/research-draft` |
+| `ai.ts` | 4 | 4 | 0 ✅ new |
 
 ---
 
@@ -85,11 +76,8 @@ Several earlier “mismatches” are now explicit canonical `dashboard_path` map
 | Gap type | Surface |
 |---|---|
 | Consolidated into one tabbed page | Demand / Cost / Funding / Working Capital assumptions live inside `assumptions/page.tsx` |
-| Missing routed page | Scenario Comparison Console |
-| Missing routed page | Scope Dimension Editors |
 | Missing routed page | Scope Review Surface |
 | Missing routed page | Compute Center |
-| Missing routed page | Scenario Wizard |
 | Missing overlay pattern | AI SME overlays (2) |
 
 ---
@@ -118,9 +106,9 @@ The real orchestrator runs in the integration suite, but the current golden harn
 
 | Item | Status |
 |---|---|
-| `db/migrations/` tooling (node-pg-migrate) | **NOT_STARTED** |
-| `tests/e2e/dashboard.test.ts` (Playwright) | **NOT_STARTED** |
-| Full `docker-compose` stack (Redis, worker) | **PARTIAL** — Postgres only |
+| `db/migrations/` tooling (node-pg-migrate) | **DONE** — root scripts + `scripts/migrate.mjs` + baseline scaffold |
+| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, and wizard smoke flows |
+| Full `docker-compose` stack (Redis, worker) | **PARTIAL** — full stack is defined, but local boot verification is blocked until Docker is available |
 
 ---
 
@@ -128,11 +116,7 @@ The real orchestrator runs in the integration suite, but the current golden harn
 
 | # | Gap | Effort |
 |---|---|---|
-| 1 | Create `api/src/routes/v1/ai.ts` + register in `server.ts` | Medium — only fully absent API router group remains |
-| 2 | `dashboard/analysis/compare/` page | Medium |
-| 3 | `dashboard/scope/formats/` + `scope/review/` pages | Medium |
-| 4 | `dashboard/compute/center/` page | Low |
-| 5 | Scenario Wizard (`wizard/scenario/start/`) | High — multi-step flow |
-| 6 | Migration tooling (node-pg-migrate) | Low |
-| 7 | Playwright E2E suite | High |
-| 8 | Full docker-compose (Redis, worker) | Medium |
+| 1 | `dashboard/scope/review/` page | Medium |
+| 2 | `dashboard/compute/center/` page | Low |
+| 3 | AI SME overlay patterns (2) | Medium |
+| 4 | Local `docker compose up` runtime verification once Docker is available | Low |

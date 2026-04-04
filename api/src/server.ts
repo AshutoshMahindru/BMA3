@@ -16,6 +16,7 @@ import referenceRouter from './routes/v1/reference';
 import decisionsRouter from './routes/v1/decisions';
 import confidenceRouter from './routes/v1/confidence';
 import governanceRouter from './routes/v1/governance';
+import aiRouter from './routes/v1/ai';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ export function createApp() {
   app.use('/api/v1/decisions', decisionsRouter);
   app.use('/api/v1/confidence', confidenceRouter);
   app.use('/api/v1/governance', governanceRouter);
+  app.use('/api/v1/ai', aiRouter);
 
 // Standard Error Envelope
   app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {

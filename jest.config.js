@@ -20,5 +20,6 @@ module.exports = {
     '^uuid$': '<rootDir>/tests/support/uuid.ts',
   },
   testMatch: ['**/tests/**/*.test.ts'],
+  testPathIgnorePatterns: ['<rootDir>/tests/e2e/'],
   verbose: true,
 };

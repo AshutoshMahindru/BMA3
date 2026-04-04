@@ -132,4 +132,55 @@ describe('API contracts', () => {
     ]);
     expect(payload.meta?.companyId).toBe('10000000-0000-4000-8000-000000000111');
   });
+
+  it('serves the AI advisory router on authenticated requests', async () => {
+    mockedQuery
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: '10000000-0000-4000-8000-000000000111',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: '90000000-0000-4000-8000-000000000111',
+            variable_name: 'take_rate',
+            current_value: 0.24,
+            unit: 'ratio',
+            evidence_ref: 'survey',
+            family: 'demand',
+            pack_name: 'Demand Pack',
+          },
+        ],
+      });
+
+    const response = await fetch(`${baseUrl}/api/v1/ai/edit-suggestions`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer dev-local-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        context: {
+          companyId: '10000000-0000-4000-8000-000000000111',
+          surface: 'assumptions',
+        },
+        prompt: 'Increase demand confidence for the current quarter',
+      }),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.data?.draftOnly).toBe(true);
+    expect(payload.data?.suggestions?.[0]).toMatchObject({
+      fieldId: '90000000-0000-4000-8000-000000000111',
+      currentValue: 0.24,
+      confidence: 'medium',
+    });
+    expect(payload.meta?.advisoryOnly).toBe(true);
+  });
 });

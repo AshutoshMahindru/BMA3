@@ -53,7 +53,7 @@ type FeedItem = {
 };
 
 const quickLaunches = [
-  { label: 'New Scenario', icon: BarChart3, href: '/dashboard/scenario', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
+  { label: 'New Scenario', icon: BarChart3, href: '/wizard/scenario/start', color: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
   { label: 'Update Assumptions', icon: Settings2, href: '/dashboard/assumptions', color: 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' },
   { label: 'View P&L', icon: FileText, href: '/dashboard/pnl', color: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
   { label: 'Run Simulation', icon: FlaskConical, href: '/dashboard/simulations', color: 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100' },
