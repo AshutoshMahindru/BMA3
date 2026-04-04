@@ -2,22 +2,33 @@
 
 > Machine-readable migration state. Updated after every session.
 > Read by agents to know what's done, what's in progress, and what's next.
+> For artifact → code-file mapping, see `CODEGEN.md`.
 
 ## Current Wave: 0 (Pre-Migration)
 
 ## Wave Status
 
-| Wave | Status | Gate | Compliance |
-|---|---|---|---|
-| 1. Foundation | NOT_STARTED | `tsc --noEmit` passes, schemas validate against seed | 3/9 pass |
-| 2. First Slice | NOT_STARTED | Golden fixture passes, P&L page shows live data | — |
-| 3. Compute | NOT_STARTED | Full 18-step DAG runs, both fixtures pass | — |
-| 4. Rewire | NOT_STARTED | All pages live, no static fallback, no string IDs | — |
-| 5. Harden | NOT_STARTED | Full CI green, compliance blocking, docker-compose up works | — |
+| Wave | Status | Sessions | Risk | Gate | Compliance |
+|---|---|---|---|---|---|
+| 1. Foundation | NOT_STARTED | 1-2 | Low | `tsc --noEmit` passes, schemas validate against seed | 3/9 → 5/9 |
+| 2. First Slice | NOT_STARTED | 3-5 | **High** | Golden fixture passes, P&L page shows live data | → 7/9 |
+| 3. Compute | NOT_STARTED | 2-3 | Medium | Full 18-step DAG runs, both fixtures pass | → 8/9 |
+| 4. Rewire | NOT_STARTED | 2-3 | Low | All pages live, no static fallback, no string IDs | → 9/9 |
+| 5. Harden | NOT_STARTED | 2-3 | Low | Full CI green, compliance blocking, docker-compose up works | 9/9 → blocking |
+
+## Verification Strategy
+
+| Wave | Method |
+|---|---|
+| 1. Foundation | Static checks: `tsc --noEmit`, Zod parse against seed data |
+| 2. First Slice | Golden fixture test: input → compute → output matches `test_fixtures.json`. Use blind-deposit verification for compute nodes. |
+| 3. Compute | Extended golden fixture (both test cases). Balance sheet identity: Assets = Liabilities + Equity. |
+| 4. Rewire | Playwright screenshots: every page renders live data, DataFreshness shows "Live". |
+| 5. Harden | Full CI pipeline green. `docker-compose up` runs the full stack. Compliance checker: 0 errors, 0 warnings. |
 
 ## File Generation Tracker
 
-### Wave 1 Targets
+### Wave 1: Foundation (types + schemas + validation + API client)
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/types/entities.ts` | NOT_STARTED | `canonical_schema.json` |
@@ -29,7 +40,7 @@
 | `web/lib/types/*.ts` | NOT_STARTED | `api_contracts.json` |
 | `db/migrations/001-reconcile.sql` | NOT_STARTED | Diff 01-schema.sql vs ddl.sql |
 
-### Wave 2 Targets
+### Wave 2: First Vertical Slice (planning → compute → P&L)
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/routes/v1/context/*.ts` | NOT_STARTED | `api_contracts.json` context |
@@ -48,7 +59,7 @@
 | `web/lib/planning-context.tsx` (rewire) | NOT_STARTED | Real API |
 | `tests/integration/compute-pipeline.test.ts` | NOT_STARTED | `test_fixtures.json` |
 
-### Wave 3 Targets
+### Wave 3: Remaining Compute Nodes (8-14)
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/compute/nodes/capex-opex.ts` | NOT_STARTED | node 8 |
@@ -59,7 +70,7 @@
 | `api/src/compute/nodes/sensitivity-risk.ts` | NOT_STARTED | node 13 |
 | `api/src/compute/nodes/confidence.ts` | NOT_STARTED | node 14 |
 
-### Wave 4 Targets
+### Wave 4: Full Rewire (all APIs + all pages)
 | Target | Status | Generated From |
 |---|---|---|
 | Remaining API routes (scope, decisions, analysis, confidence, governance) | NOT_STARTED | `api_contracts.json` |
@@ -67,7 +78,7 @@
 | Delete `/dashboard/simulations/` duplicate | NOT_STARTED | Audit finding |
 | Fix `03-risk-seed.sql` UUID format | NOT_STARTED | Audit finding |
 
-### Wave 5 Targets
+### Wave 5: Harden (auth, logging, tests, CI gate)
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/middleware/auth.ts` | NOT_STARTED | JWT |
