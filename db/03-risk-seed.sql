@@ -1,11 +1,11 @@
 -- Risk Seed Data for Phase 4
 -- Company/Tenant IDs from 02-seed.sql
--- cccccccc-0001-0000-0000-000000000001 Scenario ID
+-- cccccccc-0001-4000-8000-000000000001 Scenario ID
 
 DO $$ 
 DECLARE 
     tenant_id UUID := '10000000-0000-4000-8000-000000000001';
-    scenario_id UUID := 'cccccccc-0001-0000-0000-000000000001';
+    scenario_id UUID := 'cccccccc-0001-4000-8000-000000000001';
     ro_id UUID;
 BEGIN
     -- R-01: Platform Commission Hike
