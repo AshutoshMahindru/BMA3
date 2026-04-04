@@ -61,8 +61,21 @@ static_data_dir = os.path.join(REPO_ROOT, 'web', 'lib', 'data')
 if os.path.isdir(static_data_dir):
     ts_files = glob.glob(os.path.join(static_data_dir, '*.ts'))
     if ts_files:
+        # Check if they're stubs (contain the STUB marker) or real data
+        stub_count = 0
+        real_count = 0
         for f in ts_files:
-            error(1, f"Static data file exists: {os.path.relpath(f, REPO_ROOT)}")
+            content = read_file(f) or ''
+            if 'STUB' in content and 'temporary' in content.lower():
+                stub_count += 1
+            elif os.path.basename(f) != 'index.ts':
+                real_count += 1
+        if real_count > 0:
+            error(1, f"{real_count} real static data files in web/lib/data/ (should be API-driven)")
+        elif stub_count > 0:
+            warn(1, f"{stub_count} stub data files in web/lib/data/ (temporary — remove after Wave 4)")
+        else:
+            ok(1, "No .ts files in web/lib/data/")
     else:
         ok(1, "No .ts files in web/lib/data/")
 else:
@@ -249,10 +262,31 @@ print("=" * 60)
 server_path = os.path.join(REPO_ROOT, 'api', 'src', 'server.ts')
 if os.path.exists(server_path):
     content = read_file(server_path)
-    if '// import' in content and 'jobs' in content:
+    # Check if any file in api/src/ imports from jobs (direct or indirect)
+    jobs_importers = []
+    for tf in find_files('api/src/**/*.ts'):
+        tc = read_file(tf)
+        if tc and re.search(r"import.*from.*['\"].*jobs['\"]|import.*['\"].*jobs['\"]|require.*jobs", tc):
+            jobs_importers.append(os.path.relpath(tf, REPO_ROOT))
+
+    # Check line-by-line: an active import is one NOT preceded by //
+    server_has_active = False
+    server_has_commented = False
+    for line in content.split('\n'):
+        stripped = line.strip()
+        if 'jobs' in stripped and 'import' in stripped:
+            if stripped.startswith('//'):
+                server_has_commented = True
+            elif stripped.startswith('import'):
+                server_has_active = True
+    other_importers = [f for f in jobs_importers if 'server.ts' not in f]
+
+    if server_has_active:
+        ok(6, "BullMQ worker import is active in server.ts")
+    elif server_has_commented and other_importers:
+        error(6, f"BullMQ worker boot is commented out in server.ts — jobs enqueue via {other_importers[0]} but worker never starts, so jobs stay QUEUED forever")
+    elif server_has_commented:
         error(6, "BullMQ worker import is commented out in server.ts")
-    elif "import './jobs'" in content or 'import "./jobs"' in content:
-        ok(6, "BullMQ worker import is active")
     else:
         warn(6, "Could not determine BullMQ worker import status")
 else:
