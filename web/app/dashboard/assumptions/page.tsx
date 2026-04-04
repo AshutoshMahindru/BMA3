@@ -20,13 +20,9 @@ import {
   upsertMarketingPlans,
   fetchCapexPlans,
   upsertCapexPlans,
-  fetchOpexPlans,
-  upsertOpexPlans,
   fetchFundingParameters,
   upsertFundingParameters,
   fetchRolloutPlans,
-  upsertRolloutPlans,
-  fetchUnitCostProfiles,
   upsertUnitCostProfiles,
   triggerCompute, 
   pollJob, 
@@ -410,7 +406,7 @@ export default function AssumptionsManager() {
       setIsLoading(false);
       setIsDirty(false);
     }
-  }, [activeTab, ctx.scenarioId, fetchFundingParameters]);
+  }, [activeTab, ctx.scenarioId]);
 
   /* Re-fetch on scenario or tab change */
   useEffect(() => {
