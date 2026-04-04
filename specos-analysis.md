@@ -115,6 +115,12 @@ The real orchestrator runs in the integration suite, and the live async queue pa
 
 ## Prioritised Gap List
 
-| # | Gap | Effort |
-|---|---|---|
-| 1 | Financial reconciliation cleanup for the seeded base scenario (negative PPE / balance-sheet imbalance warnings still appear during steps 11 and 16) | Medium |
+No remaining prioritized SpecOS parity gaps are currently tracked. The last
+runtime cleanup item was the seeded base-scenario reconciliation issue, which is
+now handled by migration
+[`006-reconcile-seeded-opening-balances.sql`](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/db/migrations/006-reconcile-seeded-opening-balances.sql).
+
+One non-blocking maintenance follow-up remains outside the prioritized parity
+list: [`api/scripts/smoke-canonical-runtime.ts`](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/api/scripts/smoke-canonical-runtime.ts)
+still assumes `/compute/runs` completes synchronously and should be updated to
+poll queued runs on the async compose runtime.
