@@ -284,7 +284,7 @@ if os.path.exists(server_path):
     if server_has_active:
         ok(6, "BullMQ worker import is active in server.ts")
     elif server_has_commented and other_importers:
-        error(6, f"BullMQ worker boot is commented out in server.ts — jobs enqueue via {other_importers[0]} but worker never starts, so jobs stay QUEUED forever")
+        error(6, f"BullMQ worker boot is commented out in server.ts — jobs enqueue via {other_importers[0]} but worker never starts, so compute jobs fail")
     elif server_has_commented:
         error(6, "BullMQ worker import is commented out in server.ts")
     else:

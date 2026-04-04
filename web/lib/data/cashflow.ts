@@ -1,5 +1,13 @@
 /* STUB — temporary until Wave 4 API wiring. See WAVE_STATUS.md. */
-export type CFRow = { label: string; values: number[]; isHeader?: boolean; isBold?: boolean };
+export type CFRow = {
+  label: string;
+  values?: number[];
+  section?: string;
+  bold?: boolean;
+  indent?: boolean;
+  isHeader?: boolean;
+  isBold?: boolean;
+};
 export const CASHFLOW_KPIS: any = {};
 export const CF_QUARTERLY_DATA: any[] = [];
 export const FCF_MONTHLY: any[] = [];
