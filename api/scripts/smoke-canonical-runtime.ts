@@ -1,6 +1,8 @@
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:4000/api/v1';
 const API_TOKEN = process.env.API_TOKEN || 'dev-local-token';
 const REQUEST_TIMEOUT_MS = 5000;
+const RUN_POLL_INTERVAL_MS = Number(process.env.COMPUTE_RUN_POLL_INTERVAL_MS || '500');
+const RUN_POLL_TIMEOUT_MS = Number(process.env.COMPUTE_RUN_POLL_TIMEOUT_MS || '30000');
 
 type Envelope<T> = {
   data?: T;
@@ -45,6 +47,37 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+type ComputeRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+type ComputeRunDetails = {
+  computeRunId: string;
+  status: ComputeRunStatus;
+  stepsTotal: number;
+  stepsCompleted: number;
+  createdAt?: string;
+  completedAt?: string | null;
+};
+
+async function waitForComputeRun(runId: string): Promise<ComputeRunDetails> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < RUN_POLL_TIMEOUT_MS) {
+    const run = await request<ComputeRunDetails>(`/compute/runs/${encodeURIComponent(runId)}`);
+
+    if (run.status === 'completed') {
+      return run;
+    }
+
+    if (run.status === 'failed' || run.status === 'cancelled') {
+      throw new Error(`Compute run ${runId} ended in status "${run.status}"`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, RUN_POLL_INTERVAL_MS));
+  }
+
+  throw new Error(`Timed out waiting for compute run ${runId} after ${RUN_POLL_TIMEOUT_MS}ms`);
 }
 
 async function main() {
@@ -107,18 +140,34 @@ async function main() {
       }),
     },
   );
-  assert(run.status === 'completed', 'Compute run did not complete immediately');
+  assert(['queued', 'completed'].includes(run.status), `Unexpected initial compute run status "${run.status}"`);
 
-  const runDetails = await request<{ computeRunId: string; status: string; stepsTotal: number; stepsCompleted: number }>(
-    `/compute/runs/${encodeURIComponent(run.computeRunId)}`,
-  );
+  const runDetails = run.status === 'completed'
+    ? await request<ComputeRunDetails>(`/compute/runs/${encodeURIComponent(run.computeRunId)}`)
+    : await waitForComputeRun(run.computeRunId);
+
+  assert(runDetails.status === 'completed', `Compute run did not complete successfully (status="${runDetails.status}")`);
   assert(runDetails.stepsTotal > 0, 'Compute run recorded no steps');
   assert(runDetails.stepsTotal === runDetails.stepsCompleted, 'Compute run steps are incomplete');
 
-  const results = await request<{ outputSummary: Record<string, number> }>(
+  const steps = await request<Array<{ stepId: string; status: string }>>(
+    `/compute/runs/${encodeURIComponent(run.computeRunId)}/steps?limit=25&offset=0`,
+  );
+  assert(steps.length > 0, 'Compute run returned no step records');
+  assert(steps.every((step) => step.status === 'completed'), 'One or more compute run steps did not complete');
+
+  const results = await request<{ computeRunId: string; status: string; outputSummary: Record<string, number>; warnings: string[] }>(
     `/compute/runs/${encodeURIComponent(run.computeRunId)}/results`,
   );
-  assert(Object.keys(results.outputSummary || {}).length > 0, 'Compute run results are empty');
+  assert(results.computeRunId === run.computeRunId, 'Compute run results returned the wrong run id');
+  assert(results.status === 'completed', 'Compute run results did not report completed status');
+
+  const freshness = await request<{ freshness: string; lastRunId: string | null; staleSurfaces: string[] }>(
+    `/compute/freshness?companyId=${encodeURIComponent(company.companyId)}&scenarioId=${encodeURIComponent(scenario.scenarioId)}`,
+  );
+  assert(freshness.freshness === 'fresh', 'Compute freshness did not report fresh after run completion');
+  assert(freshness.lastRunId === run.computeRunId, 'Compute freshness did not report the latest run id');
+  assert(Array.isArray(freshness.staleSurfaces), 'Compute freshness did not return staleSurfaces');
 
   console.log(
     JSON.stringify(
@@ -131,6 +180,8 @@ async function main() {
         revenue: executiveSummary.revenue,
         ebitda: executiveSummary.ebitda,
         computeRunId: run.computeRunId,
+        initialStatus: run.status,
+        stepsTotal: runDetails.stepsTotal,
       },
       null,
       2,
