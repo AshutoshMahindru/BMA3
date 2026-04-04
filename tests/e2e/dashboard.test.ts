@@ -17,6 +17,22 @@ test('loads the scope dimension editor route family', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Reference Inventory' })).toBeVisible();
 });
 
+test('loads the scope review surface', async ({ page }) => {
+  await page.goto('/dashboard/scope/review');
+
+  await expect(page.getByRole('heading', { name: 'Scope Review Surface' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Validation Summary' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /FY26 Core Rollout/i })).toBeVisible();
+});
+
+test('loads the compute center', async ({ page }) => {
+  await page.goto('/dashboard/compute/center');
+
+  await expect(page.getByRole('heading', { name: 'Compute Center' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Run History' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run Compute' })).toBeVisible();
+});
+
 test('creates a scenario through the scenario wizard start flow', async ({ page }) => {
   await page.goto('/wizard/scenario/start');
 

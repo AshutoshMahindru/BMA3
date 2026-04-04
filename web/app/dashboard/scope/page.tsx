@@ -7,6 +7,7 @@ const families = [
   { slug: 'channels', label: 'Channels' },
   { slug: 'operating-models', label: 'Operating Models' },
   { slug: 'geography', label: 'Geography' },
+  { slug: 'review', label: 'Scope Review' },
 ];
 
 export default function ScopeEditorsIndexPage() {
@@ -29,7 +30,9 @@ export default function ScopeEditorsIndexPage() {
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#1E5B9C]">Dimension</p>
             <h2 className="mt-3 text-lg font-semibold text-gray-900">{family.label}</h2>
             <p className="mt-2 text-sm text-gray-500">
-              Review the live node inventory and compare it against the canonical reference set.
+              {family.slug === 'review'
+                ? 'Review live coverage, bundle validation, and dimension completeness before compute runs.'
+                : 'Review the live node inventory and compare it against the canonical reference set.'}
             </p>
           </Link>
         ))}

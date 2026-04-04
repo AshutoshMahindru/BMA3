@@ -35,9 +35,7 @@ const BundleApplyBody = z.object({
 });
 
 const ScopeReviewValidateBody = z.object({
-  companyId: idSchema,
-  scenarioId: idSchema.optional(),
-  scopeBundleId: idSchema.optional(),
+  scopeBundleId: idSchema,
 });
 
 const DimensionQuery = z.object({
@@ -294,18 +292,16 @@ router.get('/geographies', validateQuery(DimensionQuery), async (req: Request, r
 // ─── POST /review/validate ───
 router.post('/review/validate', validate(ScopeReviewValidateBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, scopeBundleId } = req.body as z.infer<typeof ScopeReviewValidateBody>;
+    const { scopeBundleId } = req.body as z.infer<typeof ScopeReviewValidateBody>;
     const issues: Array<{ code: string; message: string; severity: string }> = [];
 
-    if (scopeBundleId) {
-      const bundle = await db.query(`SELECT id FROM scope_bundles WHERE id::text = $1 AND company_id::text = $2 AND is_deleted = FALSE`, [scopeBundleId, companyId]);
-      if (Number(bundle.rowCount || 0) === 0) {
-        issues.push({ code: 'BUNDLE_NOT_FOUND', message: 'Scope bundle not found or not owned by company', severity: 'error' });
-      } else {
-        const items = await db.query(`SELECT COUNT(*)::int AS cnt FROM scope_bundle_items WHERE scope_bundle_id::text = $1`, [scopeBundleId]);
-        if ((items.rows[0]?.cnt || 0) === 0) {
-          issues.push({ code: 'EMPTY_BUNDLE', message: 'Scope bundle has no dimension items', severity: 'warning' });
-        }
+    const bundle = await db.query(`SELECT id FROM scope_bundles WHERE id::text = $1 AND is_deleted = FALSE`, [scopeBundleId]);
+    if (Number(bundle.rowCount || 0) === 0) {
+      issues.push({ code: 'BUNDLE_NOT_FOUND', message: 'Scope bundle not found', severity: 'error' });
+    } else {
+      const items = await db.query(`SELECT COUNT(*)::int AS cnt FROM scope_bundle_items WHERE scope_bundle_id::text = $1`, [scopeBundleId]);
+      if ((items.rows[0]?.cnt || 0) === 0) {
+        issues.push({ code: 'EMPTY_BUNDLE', message: 'Scope bundle has no dimension items', severity: 'warning' });
       }
     }
 
