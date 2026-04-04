@@ -6,12 +6,18 @@ import {
   asRecord,
   confidenceStateFromLevel,
   confidenceStateFromNumeric,
+  errorPayload,
   idSchema,
   meta,
   paginate,
   safeNumber,
+  sendError,
   traceId,
 } from './_shared';
+import {
+  computeDqiScore,
+  upsertDqiScore,
+} from '../../compute/nodes/confidence';
 
 const router = Router();
 
@@ -332,16 +338,12 @@ router.post('/evidence', validate(EvidenceCreateBody), async (req: Request, res:
     const scope = await resolveEntityScope(entityType, entityId);
 
     if (!scope) {
-      return res.status(404).json({
-        error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${entityId} could not be resolved`, trace_id: traceId(req) },
-      });
+      return sendError(res, req, 404, 'ENTITY_NOT_FOUND', `Entity ${entityId} could not be resolved`);
     }
 
     const tenantId = await resolveCompanyTenant(scope.companyId);
     if (!tenantId) {
-      return res.status(404).json({
-        error: { code: 'COMPANY_NOT_FOUND', message: `Company ${scope.companyId} not found`, trace_id: traceId(req) },
-      });
+      return sendError(res, req, 404, 'COMPANY_NOT_FOUND', `Company ${scope.companyId} not found`);
     }
 
     await client.query('BEGIN');
@@ -409,9 +411,7 @@ router.get('/evidence/:evidenceId', validateParams(EvidenceParams), async (req: 
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({
-        error: { code: 'EVIDENCE_NOT_FOUND', message: `Evidence ${evidenceId} not found`, trace_id: traceId(req) },
-      });
+      return res.status(404).json(errorPayload(req, 'EVIDENCE_NOT_FOUND', `Evidence ${evidenceId} not found`));
     }
 
     const row = result.rows[0] as any;
@@ -471,9 +471,7 @@ router.post('/assessments', validate(AssessmentCreateBody), async (req: Request,
     const scope = await resolveEntityScope(entityType, entityId);
 
     if (!scope) {
-      return res.status(404).json({
-        error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${entityId} could not be resolved`, trace_id: traceId(req) },
-      });
+      return res.status(404).json(errorPayload(req, 'ENTITY_NOT_FOUND', `Entity ${entityId} could not be resolved`));
     }
 
     const { state, numericScore } = confidenceStateFromLevel(confidenceLevel);
@@ -509,9 +507,7 @@ router.patch('/assessments/:assessmentId', validateParams(AssessmentParams), val
     );
 
     if (existing.rowCount === 0) {
-      return res.status(404).json({
-        error: { code: 'ASSESSMENT_NOT_FOUND', message: `Assessment ${assessmentId} not found`, trace_id: traceId(req) },
-      });
+      return res.status(404).json(errorPayload(req, 'ASSESSMENT_NOT_FOUND', `Assessment ${assessmentId} not found`));
     }
 
     const body = req.body as z.infer<typeof AssessmentPatchBody>;
@@ -607,40 +603,22 @@ router.post('/dqi', validate(DqiCreateBody), async (req: Request, res: Response,
       acc[factor.name.toLowerCase()] = safeNumber(factor.score);
       return acc;
     }, {});
-    const scores = [
-      factorMap.source_quality,
-      factorMap.freshness,
-      factorMap.completeness,
-      factorMap.relevance,
-      factorMap.granularity,
-      factorMap.consistency,
-      factorMap.traceability,
-    ].map(safeNumber);
-    const overallDqi = scores.reduce((sum, score) => sum + score, 0) / Math.max(scores.length, 1);
+    const scoreResult = computeDqiScore({
+      sourceQualityScore: safeNumber(factorMap.source_quality),
+      freshnessScore: safeNumber(factorMap.freshness),
+      completenessScore: safeNumber(factorMap.completeness),
+      relevanceScore: safeNumber(factorMap.relevance),
+      granularityScore: safeNumber(factorMap.granularity),
+      consistencyScore: safeNumber(factorMap.consistency),
+      traceabilityScore: safeNumber(factorMap.traceability),
+    });
 
-    const updated = await db.query(
-      `INSERT INTO dqi_scores
-         (entity_type, entity_id, source_quality_score, freshness_score, completeness_score, relevance_score, granularity_score, consistency_score, traceability_score, overall_score, computed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-       RETURNING created_at`,
-      [
-        entityType,
-        entityId,
-        scores[0],
-        scores[1],
-        scores[2],
-        scores[3],
-        scores[4],
-        scores[5],
-        scores[6],
-        overallDqi,
-      ],
-    );
+    await upsertDqiScore(entityType, entityId, scoreResult);
 
     res.status(201).json({
       data: {
-        overallDqi,
-        updatedAt: updated.rows[0].created_at,
+        overallDqi: scoreResult.overallScore,
+        updatedAt: new Date().toISOString(),
       },
       meta: meta(),
     });

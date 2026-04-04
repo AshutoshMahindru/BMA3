@@ -336,7 +336,7 @@ async function executeFinalizeStub(ctx: ComputeContext, _state: PipelineState): 
 
 // ── Main orchestrator ─────────────────────────────────────────────────────────
 
-export async function executeComputePipeline(ctx: ComputeContext): Promise<void> {
+export async function executeComputePipeline(ctx: ComputeContext): Promise<PipelineState> {
   const steps = buildExecutionPlan();
 
   const state: PipelineState = {
@@ -446,4 +446,6 @@ export async function executeComputePipeline(ctx: ComputeContext): Promise<void>
       [ctx.run_id]
     );
   }
+
+  return state;
 }

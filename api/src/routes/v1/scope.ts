@@ -3,11 +3,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
 import { validate, validateParams, validateQuery } from '../../middleware/validate';
+import { idSchema, meta, traceId } from './_shared';
 
 const router = Router();
-
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
 
 const BundleQuery = z.object({
   companyId: idSchema,
@@ -61,22 +59,32 @@ const ScopeReviewSummaryQuery = z.object({
 
 const BundleIdParam = z.object({ scopeBundleId: idSchema });
 
-function traceId(req: Request): string {
-  return (req.headers['x-trace-id'] as string) || 'no-trace-id';
-}
+const ALLOWED_DIMENSION_TABLES: Record<string, Set<string>> = {
+  format_taxonomy_nodes: new Set(),
+  category_taxonomy_nodes: new Set(),
+  portfolio_nodes: new Set(['node_type']),
+  geography_nodes: new Set(['iso_code']),
+};
 
-function meta(extra?: Record<string, unknown>) {
-  return {
-    freshness: { source: 'database', timestamp: new Date().toISOString() },
-    ...(extra || {}),
+function requestCompanyId(req: Request, fallbackCompanyId?: string): string | undefined {
+  const requestWithClaims = req as Request & {
+    user?: { companyId?: string; company_id?: string };
+    claims?: { companyId?: string; company_id?: string };
   };
+
+  return requestWithClaims.user?.companyId
+    || requestWithClaims.user?.company_id
+    || requestWithClaims.claims?.companyId
+    || requestWithClaims.claims?.company_id
+    || fallbackCompanyId;
 }
 
 // ─── GET /bundles ───
 router.get('/bundles', validateQuery(BundleQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { companyId, scenarioId, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof BundleQuery>;
-    const params: unknown[] = [companyId, limit, offset];
+    const tenantCompanyId = requestCompanyId(req, companyId);
+    const params: unknown[] = [tenantCompanyId, limit, offset];
     let where = 'sb.company_id::text = $1 AND sb.is_deleted = FALSE';
     if (scenarioId) {
       where += ` AND sb.scenario_id::text = $${params.length + 1}`;
@@ -100,7 +108,7 @@ router.get('/bundles', validateQuery(BundleQuery), async (req: Request, res: Res
         status: r.status,
         dimensionCount: r.dimension_count,
       })),
-      meta: meta({ companyId }),
+      meta: meta({ companyId: tenantCompanyId }),
     });
   } catch (error) { next(error); }
 });
@@ -203,7 +211,18 @@ router.post('/bundles/:scopeBundleId/apply', validateParams(BundleIdParam), vali
 
 // ─── Dimension listing helpers ───
 async function listDimensionNodes(tableName: string, companyId: string, limit: number, offset: number, extraColumns: string[] = []) {
-  const cols = ['id', 'name', 'parent_id', 'level_depth', ...extraColumns];
+  const allowedExtraColumns = ALLOWED_DIMENSION_TABLES[tableName];
+  if (!allowedExtraColumns) {
+    throw new Error(`Unsupported dimension table: ${tableName}`);
+  }
+
+  const sanitizedExtraColumns = extraColumns.filter((column) => allowedExtraColumns.has(column));
+  if (sanitizedExtraColumns.length !== extraColumns.length) {
+    const rejected = extraColumns.filter((column) => !allowedExtraColumns.has(column));
+    throw new Error(`Unsupported extra columns for ${tableName}: ${rejected.join(', ')}`);
+  }
+
+  const cols = ['id', 'name', 'parent_id', 'level_depth', ...sanitizedExtraColumns];
   const select = cols.map(c => `t.${c}`).join(', ');
   const { rows } = await db.query(
     `SELECT ${select} FROM ${tableName} t WHERE t.company_id::text = $1 ORDER BY t.name ASC LIMIT $2 OFFSET $3`,

@@ -10,10 +10,10 @@
  * Source: computation_graph.json → node_decisions
  *
  * DDL table: decision_records
- * Columns: id, company_id, scenario_id, version_id, family (decision_family),
- *   status (governance_status), scope_bundle_id, title, rationale_summary,
- *   owner_user_id, effective_period_id, effective_to_period_id,
- *   metadata, is_deleted, created_at, updated_at
+ * Columns: id, company_id, scenario_id, version_id, decision_family,
+ *   decision_status, scope_bundle_id, title, rationale_summary,
+ *   owner_user_id, effective_from_period_id, effective_to_period_id,
+ *   metadata, created_at, updated_at
  */
 
 import { db } from '../../db';
@@ -31,17 +31,21 @@ export async function executeDecisions(
   // ── Step 1-4: Resolve decisions across all families ─────────────────────
   // Decision families: product, market, marketing, operations
   // Only decisions with status 'accepted' or 'activated' enter compute
-  // DDL: decision_records columns: family (decision_family enum), status (governance_status)
+  // DDL: decision_records columns: decision_family, decision_status
   const decisionsResult = await db.query(
-    `SELECT d.id, d.family, d.title,
-            d.status, d.scope_bundle_id,
-            d.effective_period_id, d.effective_to_period_id,
+    `SELECT d.id,
+            d.decision_family AS family,
+            d.title,
+            d.decision_status AS status,
+            d.scope_bundle_id,
+            d.effective_from_period_id AS effective_period_id,
+            d.effective_to_period_id,
             d.metadata
      FROM decision_records d
      WHERE d.company_id = $1
        AND d.scenario_id = $2
-       AND d.status IN ('accepted', 'activated')
-     ORDER BY d.family, d.created_at ASC`,
+       AND d.decision_status IN ('accepted', 'active')
+     ORDER BY d.decision_family, d.created_at ASC`,
     [ctx.company_id, ctx.scenario_id]
   );
 
@@ -51,11 +55,14 @@ export async function executeDecisions(
   // Decisions in draft/rejected state are excluded (already filtered above)
   // Log decisions that were excluded
   const excludedResult = await db.query(
-    `SELECT id, family, status, title
+    `SELECT id,
+            decision_family AS family,
+            decision_status AS status,
+            title
      FROM decision_records
      WHERE company_id = $1
        AND scenario_id = $2
-       AND status NOT IN ('accepted', 'activated')`,
+       AND decision_status NOT IN ('accepted', 'active')`,
     [ctx.company_id, ctx.scenario_id]
   );
 
@@ -115,12 +122,12 @@ export async function executeDecisions(
             const d2Start = periodDateMap.get(d2.effective_period_id);
             const d2End = periodDateMap.get(d2.effective_to_period_id);
 
-            // If we can resolve dates, do a real overlap check; otherwise flag conservatively
+            // Only warn when both ranges resolve and actually overlap.
             const hasOverlap =
               d1Start && d1End && d2Start && d2End
                 ? new Date(d1Start.start) <= new Date(d2End.end) &&
                   new Date(d2Start.start) <= new Date(d1End.end)
-                : true; // conservative: flag if we can't resolve dates
+                : false;
 
             if (hasOverlap) {
               logger.warn(

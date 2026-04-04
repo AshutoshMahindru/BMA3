@@ -1,9 +1,9 @@
 import crypto from 'crypto';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { z } from 'zod';
 
-export const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-export const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
+export const uuidSchema = z.string().uuid('Invalid identifier format');
+export const idSchema = uuidSchema;
 
 export function traceId(req: Request): string {
   return (req.headers['x-trace-id'] as string) || 'no-trace-id';
@@ -15,6 +15,40 @@ export function meta(extra?: Record<string, unknown>) {
     governanceState: 'draft',
     ...(extra || {}),
   };
+}
+
+export function errorPayload(
+  req: Request,
+  code: string,
+  message: string,
+  options?: {
+    governance_status?: string;
+    details?: unknown;
+  },
+) {
+  return {
+    error: {
+      code,
+      message,
+      governance_status: options?.governance_status || 'draft',
+      trace_id: traceId(req),
+      ...(options?.details !== undefined ? { details: options.details } : {}),
+    },
+  };
+}
+
+export function sendError(
+  res: Response,
+  req: Request,
+  status: number,
+  code: string,
+  message: string,
+  options?: {
+    governance_status?: string;
+    details?: unknown;
+  },
+) {
+  return res.status(status).json(errorPayload(req, code, message, options));
 }
 
 export function paginate(query: Record<string, unknown>) {

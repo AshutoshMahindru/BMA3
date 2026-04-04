@@ -205,36 +205,45 @@ router.get('/approval-workflows', validateQuery(WorkflowsQuery), async (req: Req
               aw.approver_id,
               aw.approval_step,
               aw.comments,
-              aw.actioned_at
+              aw.actioned_at,
+              COALESCE(
+                json_agg(
+                  json_build_object(
+                    'stepOrder', aws.step_order,
+                    'stepName', COALESCE(NULLIF(aws.action, ''), aw.workflow_type, 'Approval'),
+                    'requiredRole', COALESCE(aws.approver, 'reviewer'),
+                    'status', COALESCE(aws.action, 'pending'),
+                    'actedAt', aws.acted_at,
+                    'comment', aws.comment
+                  )
+                  ORDER BY aws.step_order ASC, aws.created_at ASC
+                ) FILTER (WHERE aws.id IS NOT NULL),
+                '[]'::json
+              ) AS step_rows
          FROM approval_workflows aw
          LEFT JOIN plan_versions pv
            ON pv.id = COALESCE(aw.version_id, aw.plan_version_id)
+         LEFT JOIN approval_workflow_steps aws
+           ON aws.workflow_id = aw.id
         WHERE COALESCE(aw.company_id, pv.company_id)::text = $1
           ${clauses}
+        GROUP BY aw.id,
+                 COALESCE(aw.version_id, aw.plan_version_id),
+                 COALESCE(aw.status::text, aw.approval_status::text, 'draft'),
+                 aw.created_at,
+                 aw.workflow_type,
+                 aw.approver_id,
+                 aw.approval_step,
+                 aw.comments,
+                 aw.actioned_at
         ORDER BY aw.created_at DESC
         LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
-    const data = [];
-    for (const workflow of workflows.rows as Array<any>) {
-      const stepRows = await db.query(
-        `SELECT id, step_order, approver, action, acted_at, comment
-           FROM approval_workflow_steps
-          WHERE workflow_id::text = $1
-          ORDER BY step_order ASC, created_at ASC`,
-        [workflow.id],
-      );
-
-      const steps = Number(stepRows.rowCount || 0) > 0
-        ? stepRows.rows.map((row: any) => ({
-            stepOrder: row.step_order,
-            stepName: `Step ${row.step_order}`,
-            requiredRole: row.approver || 'reviewer',
-            status: row.action || 'pending',
-            actedAt: row.acted_at,
-            comment: row.comment,
-          }))
+    const data = (workflows.rows as Array<any>).map((workflow) => {
+      const steps = Array.isArray(workflow.step_rows) && workflow.step_rows.length > 0
+        ? workflow.step_rows
         : [{
             stepOrder: workflow.approval_step || 1,
             stepName: workflow.workflow_type || 'Approval',
@@ -244,14 +253,14 @@ router.get('/approval-workflows', validateQuery(WorkflowsQuery), async (req: Req
             comment: workflow.comments,
           }];
 
-      data.push({
+      return {
         workflowId: workflow.id,
         versionId: workflow.version_id,
         status: workflow.status,
         submittedAt: workflow.submitted_at,
         steps,
-      });
-    }
+      };
+    });
 
     res.json({ data, meta: meta() });
   } catch (error) {
@@ -260,6 +269,8 @@ router.get('/approval-workflows', validateQuery(WorkflowsQuery), async (req: Req
 });
 
 router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
     const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
     const workflow = await resolveWorkflow(workflowId);
@@ -272,7 +283,10 @@ router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowPar
 
     const { reason, notes } = req.body as z.infer<typeof WorkflowActionBody>;
 
-    await db.query(
+    await client.query('BEGIN');
+    started = true;
+
+    const updatedWorkflow = await client.query(
       `UPDATE approval_workflows
           SET approval_status = 'pending',
               comments = $2,
@@ -280,11 +294,20 @@ router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowPar
               completed_at = NULL,
               workflow_type = COALESCE(workflow_type, 'review'),
               status = 'submitted'
-        WHERE id::text = $1`,
+        WHERE id::text = $1
+        RETURNING id`,
       [workflowId, notes || reason],
     );
 
-    await db.query(
+    if (updatedWorkflow.rowCount === 0) {
+      await client.query('ROLLBACK');
+      started = false;
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await client.query(
       `UPDATE plan_versions
           SET status = 'in_review',
               updated_at = NOW()
@@ -292,11 +315,14 @@ router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowPar
       [workflow.version_id],
     );
 
-    await db.query(
+    await client.query(
       `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
        VALUES ($1, 1, 'reviewer', 'submit', NOW(), $2)`,
       [workflowId, reason],
     );
+
+    await client.query('COMMIT');
+    started = false;
 
     await logGovernanceEvent(workflow.company_id, workflow.version_id, 'submit', reason, { workflowId });
 
@@ -309,11 +335,18 @@ router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowPar
       meta: meta({ governanceState: 'under_review' }),
     });
   } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 
 router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
     const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
     const workflow = await resolveWorkflow(workflowId);
@@ -326,18 +359,30 @@ router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowPa
 
     const { reason } = req.body as z.infer<typeof WorkflowActionBody>;
 
-    await db.query(
+    await client.query('BEGIN');
+    started = true;
+
+    const updatedWorkflow = await client.query(
       `UPDATE approval_workflows
           SET approval_status = 'approved',
               comments = $2,
               actioned_at = NOW(),
               completed_at = NOW(),
               status = 'approved'
-        WHERE id::text = $1`,
+        WHERE id::text = $1
+        RETURNING id`,
       [workflowId, reason],
     );
 
-    await db.query(
+    if (updatedWorkflow.rowCount === 0) {
+      await client.query('ROLLBACK');
+      started = false;
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await client.query(
       `UPDATE plan_versions
           SET status = 'approved',
               updated_at = NOW()
@@ -345,11 +390,14 @@ router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowPa
       [workflow.version_id],
     );
 
-    await db.query(
+    await client.query(
       `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
        VALUES ($1, COALESCE($2, 1), 'approver', 'approve', NOW(), $3)`,
       [workflowId, workflow.approval_step, reason],
     );
+
+    await client.query('COMMIT');
+    started = false;
 
     await logGovernanceEvent(workflow.company_id, workflow.version_id, 'approve', reason, { workflowId });
 
@@ -362,11 +410,18 @@ router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowPa
       meta: meta({ governanceState: 'approved' }),
     });
   } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 
 router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
     const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
     const workflow = await resolveWorkflow(workflowId);
@@ -382,18 +437,30 @@ router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowPar
       ? `${reason}\nSuggested actions: ${suggestedActions.join(', ')}`
       : reason;
 
-    await db.query(
+    await client.query('BEGIN');
+    started = true;
+
+    const updatedWorkflow = await client.query(
       `UPDATE approval_workflows
           SET approval_status = 'rejected',
               comments = $2,
               actioned_at = NOW(),
               completed_at = NOW(),
               status = 'rejected'
-        WHERE id::text = $1`,
+        WHERE id::text = $1
+        RETURNING id`,
       [workflowId, comment],
     );
 
-    await db.query(
+    if (updatedWorkflow.rowCount === 0) {
+      await client.query('ROLLBACK');
+      started = false;
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await client.query(
       `UPDATE plan_versions
           SET status = 'archived',
               updated_at = NOW()
@@ -401,11 +468,14 @@ router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowPar
       [workflow.version_id],
     );
 
-    await db.query(
+    await client.query(
       `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
        VALUES ($1, COALESCE($2, 1), 'approver', 'reject', NOW(), $3)`,
       [workflowId, workflow.approval_step, comment],
     );
+
+    await client.query('COMMIT');
+    started = false;
 
     await logGovernanceEvent(workflow.company_id, workflow.version_id, 'reject', reason, { workflowId, suggestedActions: suggestedActions || [] });
 
@@ -418,7 +488,12 @@ router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowPar
       meta: meta({ governanceState: 'rejected' }),
     });
   } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -714,41 +789,46 @@ router.get('/decision-memory/:decisionRecordId', validateParams(DecisionRecordPa
 });
 
 router.post('/publication/:versionId/publish', validateParams(VersionParams), validate(PublicationBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
     const { versionId } = req.params as z.infer<typeof VersionParams>;
     const { reason } = req.body as z.infer<typeof PublicationBody>;
-    const version = await db.query(
-      `SELECT company_id
-         FROM plan_versions
-        WHERE id::text = $1
-          AND is_deleted = FALSE`,
-      [versionId],
-    );
 
-    if (version.rowCount === 0) {
-      return res.status(404).json({
-        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
-      });
-    }
+    await client.query('BEGIN');
+    started = true;
 
-    await db.query(
+    const updatedVersion = await client.query(
       `UPDATE plan_versions
           SET status = 'published',
               is_frozen = TRUE,
               frozen_at = COALESCE(frozen_at, NOW()),
               published_at = NOW(),
               updated_at = NOW()
-        WHERE id::text = $1`,
+        WHERE id::text = $1
+          AND is_deleted = FALSE
+        RETURNING company_id`,
       [versionId],
     );
 
-    await db.query(
+    if (updatedVersion.rowCount === 0) {
+      await client.query('ROLLBACK');
+      started = false;
+      return res.status(404).json({
+        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await client.query(
       `INSERT INTO publication_events (version_id, action, actor_id, occurred_at)
        VALUES ($1, 'publish', 'system', NOW())`,
       [versionId],
     );
 
-    await logGovernanceEvent(version.rows[0].company_id, versionId, 'publish', reason);
+    await client.query('COMMIT');
+    started = false;
+
+    await logGovernanceEvent(updatedVersion.rows[0].company_id, versionId, 'publish', reason);
 
     res.json({
       data: {
@@ -759,45 +839,55 @@ router.post('/publication/:versionId/publish', validateParams(VersionParams), va
       meta: meta({ governanceState: 'published' }),
     });
   } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 
 router.post('/publication/:versionId/unpublish', validateParams(VersionParams), validate(PublicationBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
     const { versionId } = req.params as z.infer<typeof VersionParams>;
     const { reason } = req.body as z.infer<typeof PublicationBody>;
-    const version = await db.query(
-      `SELECT company_id
-         FROM plan_versions
-        WHERE id::text = $1
-          AND is_deleted = FALSE`,
-      [versionId],
-    );
 
-    if (version.rowCount === 0) {
-      return res.status(404).json({
-        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
-      });
-    }
+    await client.query('BEGIN');
+    started = true;
 
-    await db.query(
+    const updatedVersion = await client.query(
       `UPDATE plan_versions
           SET status = 'approved',
               is_frozen = FALSE,
               published_at = NULL,
               updated_at = NOW()
-        WHERE id::text = $1`,
+        WHERE id::text = $1
+          AND is_deleted = FALSE
+        RETURNING company_id`,
       [versionId],
     );
 
-    await db.query(
+    if (updatedVersion.rowCount === 0) {
+      await client.query('ROLLBACK');
+      started = false;
+      return res.status(404).json({
+        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await client.query(
       `INSERT INTO publication_events (version_id, action, actor_id, occurred_at)
        VALUES ($1, 'unpublish', 'system', NOW())`,
       [versionId],
     );
 
-    await logGovernanceEvent(version.rows[0].company_id, versionId, 'unpublish', reason);
+    await client.query('COMMIT');
+    started = false;
+
+    await logGovernanceEvent(updatedVersion.rows[0].company_id, versionId, 'unpublish', reason);
 
     res.json({
       data: {
@@ -808,7 +898,12 @@ router.post('/publication/:versionId/unpublish', validateParams(VersionParams), 
       meta: meta({ governanceState: 'approved' }),
     });
   } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
     next(error);
+  } finally {
+    client.release();
   }
 });
 
