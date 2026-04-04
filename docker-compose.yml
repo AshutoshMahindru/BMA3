@@ -11,6 +11,91 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fpe_admin -d fpe_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fpe-redis
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: node:20-alpine
+    container_name: fpe-api
+    working_dir: /workspace/api
+    command: sh -lc "npm ci && npm run dev"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: fpe_db
+      DB_USER: fpe_admin
+      DB_PASSWORD: fpe_password
+      REDIS_URL: redis://redis:6379
+      COMPUTE_EXECUTION_MODE: async_queue
+      DEV_AUTH_TOKEN: ${DEV_AUTH_TOKEN:-dev-local-token}
+      DEV_TENANT_ID: ${DEV_TENANT_ID:-10000000-0000-4000-8000-000000000001}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./:/workspace
+    ports:
+      - "${API_HOST_PORT:-4000}:4000"
+    restart: unless-stopped
+
+  worker:
+    image: node:20-alpine
+    container_name: fpe-worker
+    working_dir: /workspace/api
+    command: sh -lc "npm ci && npm run worker"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: fpe_db
+      DB_USER: fpe_admin
+      DB_PASSWORD: fpe_password
+      REDIS_URL: redis://redis:6379
+      COMPUTE_EXECUTION_MODE: async_queue
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - ./:/workspace
+    restart: unless-stopped
+
+  web:
+    image: node:20-alpine
+    container_name: fpe-web
+    working_dir: /workspace/web
+    command: sh -lc "npm ci && npm run dev -- --hostname 0.0.0.0 -p 3000"
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_API_TOKEN: ${DEV_AUTH_TOKEN:-dev-local-token}
+    volumes:
+      - ./:/workspace
+    ports:
+      - "${WEB_HOST_PORT:-3000}:3000"
     restart: unless-stopped
 
 volumes:

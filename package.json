@@ -8,16 +8,22 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.2",
     "jest": "^30.3.0",
+    "node-pg-migrate": "^8.0.3",
     "ts-jest": "^29.4.9",
     "typescript": "^6.0.2"
   },
   "scripts": {
     "test": "jest --no-cache",
     "test:golden": "jest tests/integration/compute-pipeline.test.ts --verbose",
-    "test:ci": "jest --no-cache --forceExit"
+    "test:ci": "jest --no-cache --forceExit",
+    "test:e2e": "playwright test",
+    "migrate:create": "node scripts/migrate.mjs create",
+    "migrate:up": "node scripts/migrate.mjs up",
+    "migrate:down": "node scripts/migrate.mjs down"
   },
   "keywords": [],
   "author": "",

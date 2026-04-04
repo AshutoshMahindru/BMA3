@@ -22,7 +22,7 @@ const navGroups = [
   { key: 'executive',   label: 'Executive',      icon: BarChart3,       href: '/dashboard/executive',
     children: [
       { label: 'Executive Cockpit',     href: '/dashboard/executive' },
-      { label: 'Scenario Comparison',   href: '/dashboard/scenario' },
+      { label: 'Scenario Comparison',   href: '/dashboard/analysis/compare' },
       { label: 'Cash & Funding',        href: '/dashboard/cash' },
       { label: 'Capital Strategy',      href: '/dashboard/capital' },
     ]
@@ -52,7 +52,7 @@ const navGroups = [
   { key: 'risk',        label: 'Risk & Sim',     icon: Shield,          href: '/dashboard/risk',
     children: [
       { label: 'Risk Dashboard',        href: '/dashboard/risk' },
-      { label: 'Simulation Lab',        href: '/dashboard/simulation' },
+      { label: 'Simulation Lab',        href: '/dashboard/simulations' },
       { label: 'Triggers & Alerts',     href: '/dashboard/triggers' },
     ]
   },

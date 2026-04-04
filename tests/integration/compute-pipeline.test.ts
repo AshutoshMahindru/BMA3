@@ -401,6 +401,10 @@ class MockRuntime {
       return this.result([]);
     }
 
+    if (q.includes('select id') && q.includes('from compute_runs') && q.includes('where id = $1')) {
+      return this.result([]);
+    }
+
     if (q.includes('select afb.id, afb.evidence_type, afb.evidence_ref, afb.updated_at')) {
       const variableName = String(params[1] ?? '');
       const binding = this.bindings.find((candidate) => candidate.variable_name === variableName);

@@ -3,7 +3,8 @@ import { db } from '../../db';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { idSchema } from './_shared';
+import { idSchema, requireTenantId } from './_shared';
+import { getComputeQueue, isAsyncComputeEnabled } from '../../lib/queue';
 
 const router = Router();
 
@@ -76,6 +77,30 @@ async function projectionCounts(scenarioId: string) {
     unitEconomics: Number(unit.rows[0]?.count || 0),
     kpis: Number(kpi.rows[0]?.count || 0),
     explainability: Number(explainability.rows[0]?.count || 0),
+  };
+}
+
+async function resolveQueuedPeriodRange(companyId: string) {
+  const result = await db.query(
+    `SELECT MIN(pp.start_date) AS start_date,
+            MAX(pp.end_date) AS end_date
+       FROM planning_periods pp
+       JOIN planning_calendars pc
+         ON pc.id = pp.calendar_id
+      WHERE pc.company_id::text = $1
+        AND pc.is_deleted = FALSE
+        AND pp.is_deleted = FALSE`,
+    [companyId],
+  );
+
+  const row = result.rows[0];
+  if (!row?.start_date || !row?.end_date) {
+    return null;
+  }
+
+  return {
+    start: String(row.start_date),
+    end: String(row.end_date),
   };
 }
 
@@ -256,6 +281,79 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
       ? []
       : ['No seeded financial projections were found for this scenario.'];
     const runId = crypto.randomUUID();
+
+    if (isAsyncComputeEnabled()) {
+      const periodRange = await resolveQueuedPeriodRange(companyId);
+      if (!periodRange) {
+        return res.status(400).json({
+          error: { code: 'MISSING_PLANNING_CONTEXT', message: 'Planning periods must exist before queueing a compute run', trace_id: traceId(req) },
+        });
+      }
+
+      await client.query('BEGIN');
+      started = true;
+
+      const queuedRun = await client.query(
+        `INSERT INTO compute_runs
+           (id, company_id, scenario_id, version_id, trigger_type, status, run_config, metadata)
+         VALUES ($1, $2, $3, $4, $5, 'queued', $6::jsonb, $7::jsonb)
+         RETURNING id, status, created_at`,
+        [
+          runId,
+          companyId,
+          scenarioId,
+          versionId,
+          triggerType || 'manual',
+          JSON.stringify({
+            assumptionSetId: version.assumption_set_id,
+            periodRange,
+            tenantId: requireTenantId(req),
+          }),
+          JSON.stringify({ warnings }),
+        ],
+      );
+
+      await client.query('COMMIT');
+      started = false;
+
+      try {
+        await getComputeQueue().add(
+          'compute-run',
+          {
+            runId,
+            tenantId: requireTenantId(req),
+            companyId,
+            scenarioId,
+            versionId,
+            assumptionSetId: String(version.assumption_set_id || ''),
+            periodRange,
+          },
+          {
+            jobId: runId,
+          },
+        );
+      } catch (queueError) {
+        await db.query(
+          `UPDATE compute_runs
+              SET status = 'failed',
+                  error_message = $2,
+                  completed_at = NOW(),
+                  updated_at = NOW()
+            WHERE id = $1`,
+          [runId, queueError instanceof Error ? queueError.message : 'Failed to enqueue compute job'],
+        );
+        throw queueError;
+      }
+
+      return res.status(201).json({
+        data: {
+          computeRunId: runId,
+          status: queuedRun.rows[0].status,
+          createdAt: queuedRun.rows[0].created_at,
+        },
+        meta: meta({ executionMode: 'async_queue' }),
+      });
+    }
 
     await client.query('BEGIN');
     started = true;

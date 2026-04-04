@@ -7,12 +7,15 @@
     "start": "tsx src/server.ts",
     "dev": "tsx src/server.ts",
     "build": "tsc",
-    "smoke:canonical": "tsx scripts/smoke-canonical-runtime.ts"
+    "smoke:canonical": "tsx scripts/smoke-canonical-runtime.ts",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
+    "bullmq": "^5.63.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "ioredis": "^5.8.2",
     "pg": "^8.11.5",
     "pino": "^10.3.1",
     "uuid": "^13.0.0",
