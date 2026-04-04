@@ -6,7 +6,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-const TENANT_ID = 'tttttttt-0000-0000-0000-000000000001';
+const TENANT_ID = '10000000-0000-4000-8000-000000000001';
 const TIMEOUT_MS = 3000;
 
 export interface ApiResult<T> {
@@ -205,4 +205,3 @@ export const fetchSimulationResults = (runId: string) =>
 
 export const checkHealth = () =>
   fetchAPI<{ status: string; message: string }>('/health');
-

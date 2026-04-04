@@ -263,6 +263,95 @@ CREATE INDEX idx_alin_set    ON assumption_lineage (assumption_set_id);
 
 CREATE INDEX idx_alin_parent ON assumption_lineage (parent_assumption_set_id);
 
+CREATE TABLE compute_runs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id      UUID NOT NULL REFERENCES companies(id),
+    scenario_id     UUID NOT NULL REFERENCES scenarios(id),
+    version_id      UUID REFERENCES plan_versions(id),
+    scope_bundle_id UUID,
+    trigger_type    TEXT NOT NULL DEFAULT 'manual',
+    status          TEXT NOT NULL DEFAULT 'queued',
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    triggered_by    UUID,
+    error_message   TEXT,
+    run_config      JSONB,
+    metadata        JSONB DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_compute_runs_company_scenario ON compute_runs (company_id, scenario_id);
+CREATE INDEX idx_compute_runs_status ON compute_runs (status);
+
+CREATE TABLE compute_run_steps (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    compute_run_id UUID NOT NULL REFERENCES compute_runs(id) ON DELETE CASCADE,
+    step_code      TEXT NOT NULL,
+    step_label     TEXT NOT NULL,
+    step_order     INTEGER NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'queued',
+    started_at     TIMESTAMPTZ,
+    completed_at   TIMESTAMPTZ,
+    output_summary JSONB,
+    error_message  TEXT,
+    metadata       JSONB DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_compute_run_steps_run ON compute_run_steps (compute_run_id, step_order);
+
+CREATE TABLE compute_run_artifacts (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    compute_run_id UUID NOT NULL REFERENCES compute_runs(id) ON DELETE CASCADE,
+    artifact_type  TEXT NOT NULL,
+    artifact_ref   TEXT,
+    row_count      INTEGER,
+    checksum       TEXT,
+    metadata       JSONB DEFAULT '{}'::jsonb,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_compute_run_artifacts_run ON compute_run_artifacts (compute_run_id);
+
+CREATE TABLE compute_dependency_snapshots (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    compute_run_id      UUID NOT NULL REFERENCES compute_runs(id) ON DELETE CASCADE,
+    snapshot_hash       TEXT,
+    dependency_manifest JSONB,
+    assumption_set_ids  JSONB,
+    scope_bundle_state  JSONB,
+    metadata            JSONB DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_compute_dependency_snapshots_run ON compute_dependency_snapshots (compute_run_id);
+
+CREATE TABLE compute_validation_results (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    compute_run_id   UUID REFERENCES compute_runs(id) ON DELETE CASCADE,
+    validation_job_id UUID NOT NULL,
+    issue_code       TEXT NOT NULL,
+    severity         TEXT NOT NULL,
+    stage_family     TEXT,
+    surface_code     TEXT,
+    entity_type      TEXT,
+    entity_id        UUID,
+    message          TEXT NOT NULL,
+    resolution_state TEXT NOT NULL DEFAULT 'open',
+    resolved_by      UUID,
+    resolved_at      TIMESTAMPTZ,
+    metadata         JSONB DEFAULT '{}'::jsonb,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_compute_validation_job ON compute_validation_results (validation_job_id);
+CREATE INDEX idx_compute_validation_run ON compute_validation_results (compute_run_id);
+
 CREATE TABLE countries (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL,
