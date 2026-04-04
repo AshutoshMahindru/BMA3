@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { Play, RotateCcw, BarChart, Activity, Sliders, Info, Zap, TrendingUp, DollarSign, Target, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Play, RotateCcw, BarChart, Activity, Sliders, Info, Zap, Target, CheckCircle2 } from 'lucide-react';
 import DataFreshness from '@/components/data-freshness';
-import { triggerSimulation, fetchSimulationResults } from '@/lib/api';
-import { useApiData } from '@/lib/use-api-data';
+import { createAnalysisSimulationRuns, getAnalysisSimulationRunsById } from '@/lib/api-client';
+import type { DataSource } from '@/lib/data-source';
 
 /* ── Types ── */
 interface SimulationSummary {
@@ -25,10 +25,36 @@ const FALLBACK_SUMMARIES: SimulationSummary[] = [
   { metric_name: 'Net Revenue', p10_value: 4200, p25_value: 4500, p50_value: 4800, p75_value: 5100, p90_value: 5500, mean_value: 4850, std_dev: 500 },
 ];
 
+function toThousands(value: unknown): number {
+  return Number(value || 0) / 1000;
+}
+
+function normalizeSummary(item: unknown): SimulationSummary | null {
+  if (!item || typeof item !== 'object') return null;
+
+  const value = item as Record<string, unknown>;
+  const metricName = typeof value.metric_name === 'string' ? value.metric_name : '';
+  if (!metricName) return null;
+
+  return {
+    metric_name: metricName,
+    p10_value: toThousands(value.p10_value),
+    p25_value: toThousands(value.p25_value),
+    p50_value: toThousands(value.p50_value),
+    p75_value: toThousands(value.p75_value),
+    p90_value: toThousands(value.p90_value),
+    mean_value: toThousands(value.mean_value),
+    std_dev: toThousands(value.std_dev),
+  };
+}
+
 export default function SimulationLab() {
   const ctx = usePlanningContext();
   const [isRunning, setIsRunning] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
+  const [results, setResults] = useState<SimulationSummary[]>(FALLBACK_SUMMARIES);
+  const [source, setSource] = useState<DataSource>('static');
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
   
   // Simulation Inputs
   const [volumeUncertainty, setVolumeUncertainty] = useState(15);
@@ -38,24 +64,76 @@ export default function SimulationLab() {
 
   const scenarioId = ctx.scenarioId || '';
 
-  const { data: results, source, lastFetched, refetch } = useApiData<SimulationSummary[]>(
-    () => runId ? fetchSimulationResults(runId) : Promise.resolve({ data: FALLBACK_SUMMARIES, error: null }),
-    FALLBACK_SUMMARIES,
-    [runId]
-  );
+  useEffect(() => {
+    let cancelled = false;
 
-  const handleRunSimulation = async () => {
-    setIsRunning(true);
-    const { data, error } = await triggerSimulation({
-      scenario_id: scenarioId,
-      simulator_type: 'monte_carlo',
-      iterations,
-      input_params: { volumeUncertainty, priceVariability, costShock }
+    async function loadSimulationResults() {
+      if (!runId) {
+        setResults(FALLBACK_SUMMARIES);
+        setSource('static');
+        setLastFetched(null);
+        return;
+      }
+
+      setSource('loading');
+      const result = await getAnalysisSimulationRunsById(runId);
+
+      if (cancelled) return;
+
+      const rawResults = result.data?.results as Record<string, unknown> | undefined;
+      const rawSummaries = Array.isArray(rawResults?.summaries) ? rawResults.summaries : [];
+      const normalizedSummaries = rawSummaries
+        .map(normalizeSummary)
+        .filter((item): item is SimulationSummary => item !== null);
+
+      if (normalizedSummaries.length > 0) {
+        setResults(normalizedSummaries);
+        setSource('api');
+        setLastFetched(result.data?.completedAt ? new Date(result.data.completedAt) : new Date());
+        return;
+      }
+
+      setResults(FALLBACK_SUMMARIES);
+      setSource('static');
+      setLastFetched(null);
+    }
+
+    loadSimulationResults().catch(() => {
+      if (cancelled) return;
+      setResults(FALLBACK_SUMMARIES);
+      setSource('static');
+      setLastFetched(null);
     });
 
-    if (data?.run_id) {
-      setRunId(data.run_id);
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  const handleRunSimulation = async () => {
+    if (!scenarioId) return;
+    setIsRunning(true);
+    setSource('loading');
+
+    const { data } = await createAnalysisSimulationRuns({
+      baseScenarioId: scenarioId,
+      label: `${ctx.scenarioName} Monte Carlo`,
+      shocks: [
+        { driver: 'volume', magnitudePct: volumeUncertainty },
+        { driver: 'price', magnitudePct: priceVariability },
+        { driver: 'cost', magnitudePct: costShock },
+        { driver: 'iterations', value: iterations },
+      ],
+    });
+
+    if (data?.runId) {
+      setRunId(data.runId);
+    } else {
+      setResults(FALLBACK_SUMMARIES);
+      setSource('static');
+      setLastFetched(null);
     }
+
     setIsRunning(false);
   };
 
@@ -116,7 +194,16 @@ export default function SimulationLab() {
           </div>
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => { setRunId(null); setVolumeUncertainty(15); setPriceVariability(5); }}
+              onClick={() => {
+                setRunId(null);
+                setResults(FALLBACK_SUMMARIES);
+                setSource('static');
+                setLastFetched(null);
+                setVolumeUncertainty(15);
+                setPriceVariability(5);
+                setCostShock(10);
+                setIterations(1000);
+              }}
               className="p-2 text-gray-400 hover:text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm transition"
             >
               <RotateCcw className="w-4 h-4" />
@@ -129,7 +216,7 @@ export default function SimulationLab() {
               }`}
             >
               {isRunning ? <Zap className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
-              {isRunning ? 'Running 1,000 Iterations...' : 'Execute Monte Carlo'}
+              {isRunning ? `Running ${iterations.toLocaleString()} Iterations...` : 'Execute Monte Carlo'}
             </button>
           </div>
         </div>

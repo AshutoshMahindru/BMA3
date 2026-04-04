@@ -7,7 +7,7 @@ Full-stack financial projection engine for dark kitchen / cloud kitchen operatio
 - **Frontend:** Next.js 14 (App Router), AG Grid, Tailwind CSS
 - **API:** Express + TypeScript REST at `/api/v1/`
 - **Database:** PostgreSQL 15 (50 tables, multi-tenant)
-- **Compute:** Canonical synchronous runtime by default, legacy BullMQ worker available behind `ENABLE_LEGACY_QUEUE=true`
+- **Compute:** Canonical synchronous runtime with seeded execution smoke coverage
 - **Spec:** SpecOS v2 submodule at `specos/` — all code traces to spec artifacts
 
 ## Quick Start
@@ -17,7 +17,7 @@ Full-stack financial projection engine for dark kitchen / cloud kitchen operatio
 git clone --recurse-submodules https://github.com/AshutoshMahindru/BMA3.git
 cd BMA3
 
-# Start database + redis
+# Start database
 docker-compose up -d
 
 # API
@@ -45,13 +45,13 @@ BMA3/
 ├── api/                   — Express + TypeScript backend
 │   └── src/
 │       ├── routes/v1/     — REST endpoints
-│       ├── compute/       — BullMQ computation nodes
+│       ├── compute/       — Canonical compute graph + orchestration helpers
 │       ├── schemas/       — Zod validation schemas
 │       └── types/         — TypeScript interfaces
 ├── db/                    — PostgreSQL schema + migrations
 ├── web/                   — Next.js dashboard frontend
 ├── tests/                 — Integration + API + E2E tests
-└── docker-compose.yml     — PostgreSQL 15 + Redis 7 (Postgres host port defaults to 5433)
+└── docker-compose.yml     — PostgreSQL 15 (host port defaults to 5433)
 ```
 
 ## Spec-Driven Development

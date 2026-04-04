@@ -2,7 +2,7 @@
 
 import { Clock, Wifi, WifiOff } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
-import type { DataSource } from '@/lib/use-api-data';
+import type { DataSource } from '@/lib/data-source';
 
 /* ══════════════════════════════════════════════════════════════════════════
    DATA FRESHNESS BADGE

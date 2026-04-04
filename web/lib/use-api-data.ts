@@ -20,8 +20,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ApiResult } from './api';
-
-export type DataSource = 'api' | 'static' | 'loading';
+import type { DataSource } from './data-source';
 
 export interface UseApiDataResult<T> {
   data: T;

@@ -11,9 +11,10 @@ Source: `specos/artifacts/api_contracts.json` + `specos/artifacts/canonical_sche
 | `src/routes/v1/assumptions.ts` | `/api/v1/assumptions` | 17 | assumption_sets, assumption_packs, assumption_pack_bindings, assumption_field_bindings, assumption_override_log, plan_versions |
 | `src/routes/v1/financials.ts` | `/api/v1/financials` | 7 | pnl_projections, cashflow_projections, balance_sheet_projections, unit_economics_projections, planning_periods, compute_runs |
 | `src/routes/v1/compute.ts` | `/api/v1/compute` | 11 | compute_runs, compute_run_steps, compute_validation_results, compute_run_artifacts, compute_dependency_snapshots, plan_versions, assumption_field_bindings, assumption_packs, assumption_sets |
-| `src/server.ts` | — | Updated | Registers all 4 new route modules |
+| `src/routes/v1/analysis.ts` | `/api/v1/analysis` | 3 | risk_objects, risk_scenarios, simulation_runs, simulation_results, scenarios, pnl_projections, cashflow_projections |
+| `src/server.ts` | — | Updated | Registers all 5 route modules |
 
-**Total: 52 endpoints**
+**Total: 55 endpoints**
 
 ## Context Routes (17)
 
@@ -78,7 +79,7 @@ Source: `specos/artifacts/api_contracts.json` + `specos/artifacts/canonical_sche
 | POST | /compute/validations | api_compute_001 | Run validation |
 | GET | /compute/validations/:validationId | api_compute_002 | Get validation status |
 | GET | /compute/validations/:validationId/issues | api_compute_003 | List validation issues |
-| POST | /compute/runs | api_compute_004 | Start compute run (BullMQ) |
+| POST | /compute/runs | api_compute_004 | Start compute run |
 | GET | /compute/runs | api_compute_005 | List compute runs |
 | GET | /compute/runs/:runId | api_compute_006 | Get run by ID |
 | POST | /compute/runs/:runId/cancel | api_compute_007 | Cancel run |
@@ -86,6 +87,14 @@ Source: `specos/artifacts/api_contracts.json` + `specos/artifacts/canonical_sche
 | GET | /compute/runs/:runId/results | api_compute_009 | Get run results |
 | GET | /compute/dependencies | api_compute_010 | Dependency graph |
 | GET | /compute/freshness | api_compute_011 | Freshness check |
+
+## Analysis Routes (3)
+
+| Method | Path | Contract ID | Description |
+|--------|------|-------------|-------------|
+| GET | /analysis/risk | api_analysis_004 | Risk register and aggregate score |
+| POST | /analysis/simulation-runs | api_analysis_005 | Start simulation run |
+| GET | /analysis/simulation-runs/:runId | api_analysis_006 | Get simulation run results |
 
 ## Key Design Decisions
 
@@ -101,8 +110,10 @@ Source: `specos/artifacts/api_contracts.json` + `specos/artifacts/canonical_sche
 
 6. **Version freeze guard**: All mutating assumption/compute endpoints check version status before writes.
 
-7. **Compute runs**: POST /compute/runs inserts a `status: 'queued'` record and attempts BullMQ queue (graceful fallback if Redis unavailable).
+7. **Compute runs**: POST /compute/runs writes a completed canonical run record immediately against the seeded financial model so local and CI execution stay deterministic.
 
 8. **Assumption family mapping**: Demand = product+market, Cost = capacity+operations, Funding = funding, Working-capital = operations (via assumption_family on assumption_packs).
 
 9. **Financial pivoting**: Raw metric rows from projection tables are pivoted into `{ periods, lineItems }` structure matching the API contract response shape.
+
+10. **Analysis bridge**: Risk and simulation screens use a thin canonical bridge over the seeded `risk_*` and `simulation_*` tables so the remaining frontend migration can happen without the legacy fallback hook.
