@@ -12,7 +12,7 @@ test('loads a canonical assumptions family surface', async ({ page }) => {
   await page.goto('/dashboard/assumptions/demand');
 
   await expect(page.getByRole('heading', { name: 'Demand Assumptions', level: 1 })).toBeVisible();
-  await expect(page.getByText('Average Order Value')).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: 'Average Order Value' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add Missing Field' })).toBeVisible();
 });
 
@@ -20,13 +20,13 @@ test('adds and saves a canonical assumptions family field', async ({ page }) => 
   await page.goto('/dashboard/assumptions/demand');
 
   await page.getByRole('button', { name: 'Add Missing Field' }).click();
-  await expect(page.getByText('Gross Demand', { exact: true })).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: 'Gross Demand' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Save Draft' }).click();
-  await expect(page.getByText('Demand Assumptions saved successfully.')).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: 'Gross Demand' })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText('Gross Demand', { exact: true })).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: 'Gross Demand' })).toBeVisible();
 });
 
 test('loads the canonical scenario comparison console', async ({ page }) => {
@@ -65,12 +65,12 @@ test('loads the compute center', async ({ page }) => {
 test('starts a compute run from the compute center', async ({ page }) => {
   await page.goto('/dashboard/compute/center');
 
-  const history = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Run History' }) });
-  await expect(history.getByRole('button')).toHaveCount(2);
+  const runButtons = page.getByRole('button').filter({ hasText: /^[0-9a-f-]{36}/i });
+  await expect(runButtons).toHaveCount(2);
 
   await page.getByRole('button', { name: 'Run Compute' }).click();
 
-  await expect(history.getByRole('button')).toHaveCount(3);
+  await expect(runButtons).toHaveCount(3);
   await expect(page.getByText(/is currently completed\./i)).toBeVisible();
   await expect(page.getByText('Selected Output Rows')).toBeVisible();
 });

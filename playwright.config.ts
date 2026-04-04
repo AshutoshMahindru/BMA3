@@ -18,7 +18,7 @@ export default defineConfig({
     {
       command: `./api/node_modules/.bin/tsx tests/e2e/fixture-api-server.ts`,
       port: apiPort,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
       env: {
         PLAYWRIGHT_API_PORT: String(apiPort),
@@ -28,7 +28,7 @@ export default defineConfig({
       command: `npm run dev -- --hostname 127.0.0.1 -p ${webPort}`,
       cwd: './web',
       port: webPort,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 120_000,
       env: {
         NEXT_PUBLIC_API_URL: `http://127.0.0.1:${apiPort}/api/v1`,

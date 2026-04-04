@@ -361,8 +361,8 @@ export default function ScopeReviewSurface() {
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                 <p className="text-sm font-semibold text-amber-800">Warnings</p>
                 <ul className="mt-2 space-y-1 text-sm text-amber-700">
-                  {summary.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
+                  {summary.warnings.map((warning, index) => (
+                    <li key={`${warning}-${index}`}>{warning}</li>
                   ))}
                 </ul>
               </div>

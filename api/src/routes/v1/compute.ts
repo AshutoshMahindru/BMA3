@@ -4,7 +4,12 @@ import { validate } from '../../middleware/validate';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { idSchema, requireTenantId } from './_shared';
-import { getComputeQueue, isAsyncComputeEnabled } from '../../lib/queue';
+import {
+  getComputeQueue,
+  getComputeWorkerHeartbeat,
+  isAsyncComputeEnabled,
+  type ComputeWorkerHeartbeat,
+} from '../../lib/queue';
 import {
   dependencyGraph,
   projectionCountsByScenario,
@@ -52,6 +57,58 @@ function asCanonicalDate(value: unknown): string | null {
   if (typeof value === 'string') return value.slice(0, 10);
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asOptionalText(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function asNonNegativeInt(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+
+  return Math.trunc(parsed);
+}
+
+function readQueueDiagnostics(row: { metadata?: unknown; error_message?: unknown }) {
+  const metadata = asRecord(row.metadata);
+  const queueDiagnostics = asRecord(metadata.queueDiagnostics);
+
+  return {
+    retryCount: asNonNegativeInt(queueDiagnostics.retryCount),
+    workerHeartbeatAt: asOptionalText(queueDiagnostics.workerHeartbeatAt),
+    lastFailureReason:
+      asOptionalText(queueDiagnostics.lastFailureReason) ?? asOptionalText(row.error_message),
+  };
+}
+
+function serializeWorkerHeartbeat(heartbeat: ComputeWorkerHeartbeat | null) {
+  if (!heartbeat) {
+    return null;
+  }
+
+  return {
+    workerId: heartbeat.workerId,
+    status: heartbeat.status,
+    updatedAt: heartbeat.updatedAt,
+    concurrency: heartbeat.concurrency,
+    activeJobs: heartbeat.activeJobs,
+    hostname: heartbeat.hostname,
+    pid: heartbeat.pid,
+  };
 }
 
 async function ensurePlanningContext(companyId: string, scenarioId: string, versionId: string) {
@@ -291,7 +348,14 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
             periodRange,
             tenantId: requireTenantId(req),
           }),
-          JSON.stringify({ warnings }),
+          JSON.stringify({
+            warnings,
+            queueDiagnostics: {
+              retryCount: 0,
+              workerHeartbeatAt: null,
+              lastFailureReason: null,
+            },
+          }),
         ],
       );
 
@@ -315,14 +379,26 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
           },
         );
       } catch (queueError) {
+        const queueErrorMessage =
+          queueError instanceof Error ? queueError.message : 'Failed to enqueue compute job';
         await db.query(
           `UPDATE compute_runs
               SET status = 'failed',
                   error_message = $2,
+                  metadata = jsonb_set(
+                    COALESCE(metadata, '{}'::jsonb),
+                    '{queueDiagnostics}',
+                    COALESCE(metadata->'queueDiagnostics', '{}'::jsonb) || $3::jsonb,
+                    true
+                  ),
                   completed_at = NOW(),
                   updated_at = NOW()
             WHERE id = $1`,
-          [runId, queueError instanceof Error ? queueError.message : 'Failed to enqueue compute job'],
+          [
+            runId,
+            queueErrorMessage,
+            JSON.stringify({ lastFailureReason: queueErrorMessage }),
+          ],
         );
         throw queueError;
       }
@@ -352,7 +428,15 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
         versionId,
         triggerType || 'manual',
         JSON.stringify({ assumptionSetId: version.assumption_set_id }),
-        JSON.stringify({ warnings, outputCounts: counts }),
+        JSON.stringify({
+          warnings,
+          outputCounts: counts,
+          queueDiagnostics: {
+            retryCount: 0,
+            workerHeartbeatAt: null,
+            lastFailureReason: null,
+          },
+        }),
       ],
     );
 
@@ -423,7 +507,7 @@ router.get('/runs', async (req: Request, res: Response, next: NextFunction) => {
     params.push(limit, offset);
 
     const { rows } = await db.query(
-      `SELECT id, status, trigger_type, created_at, completed_at
+      `SELECT id, status, trigger_type, created_at, completed_at, error_message, metadata
          FROM compute_runs
         WHERE company_id::text = $1
           AND scenario_id::text = $2
@@ -434,13 +518,19 @@ router.get('/runs', async (req: Request, res: Response, next: NextFunction) => {
     );
 
     res.json({
-      data: rows.map((row: any) => ({
-        computeRunId: row.id,
-        status: row.status,
-        triggerType: row.trigger_type,
-        createdAt: row.created_at,
-        completedAt: row.completed_at,
-      })),
+      data: rows.map((row: any) => {
+        const diagnostics = readQueueDiagnostics(row);
+        return {
+          computeRunId: row.id,
+          status: row.status,
+          triggerType: row.trigger_type,
+          retryCount: diagnostics.retryCount,
+          workerHeartbeatAt: diagnostics.workerHeartbeatAt,
+          lastFailureReason: diagnostics.lastFailureReason,
+          createdAt: row.created_at,
+          completedAt: row.completed_at,
+        };
+      }),
       meta: meta(),
     });
   } catch (error) {
@@ -452,7 +542,7 @@ router.get('/runs/:runId', async (req: Request, res: Response, next: NextFunctio
   try {
     const { runId } = req.params;
     const run = await db.query(
-      `SELECT id, status, trigger_type, created_at, completed_at
+      `SELECT id, status, trigger_type, created_at, completed_at, error_message, metadata
          FROM compute_runs
         WHERE id::text = $1`,
       [runId],
@@ -471,12 +561,18 @@ router.get('/runs/:runId', async (req: Request, res: Response, next: NextFunctio
         WHERE compute_run_id::text = $1`,
       [runId],
     );
+    const diagnostics = readQueueDiagnostics(run.rows[0]);
+    const workerHeartbeat = serializeWorkerHeartbeat(await getComputeWorkerHeartbeat());
 
     res.json({
       data: {
         computeRunId: run.rows[0].id,
         status: run.rows[0].status,
         triggerType: run.rows[0].trigger_type,
+        retryCount: diagnostics.retryCount,
+        workerHeartbeatAt: diagnostics.workerHeartbeatAt,
+        lastFailureReason: diagnostics.lastFailureReason,
+        workerHeartbeat,
         stepsTotal: Number(steps.rows[0]?.total || 0),
         stepsCompleted: Number(steps.rows[0]?.completed || 0),
         createdAt: run.rows[0].created_at,
@@ -640,6 +736,7 @@ router.get('/freshness', async (req: Request, res: Response, next: NextFunction)
     const staleSurfaces = Object.entries(outputCounts)
       .filter(([, count]) => Number(count) === 0)
       .map(([name]) => name);
+    const workerHeartbeat = serializeWorkerHeartbeat(await getComputeWorkerHeartbeat());
 
     res.json({
       data: {
@@ -647,6 +744,7 @@ router.get('/freshness', async (req: Request, res: Response, next: NextFunction)
         lastRunId: row?.id || null,
         lastRunAt: row?.completed_at || null,
         staleSurfaces,
+        workerHeartbeat,
       },
       meta: meta(),
     });
