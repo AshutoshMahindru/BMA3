@@ -51,23 +51,11 @@ export async function fetchAPI<T = any>(
 
 /* ── Typed endpoint helpers ──────────────────────────────────────────── */
 
-export const fetchScenarios = (companyId?: string) =>
-  fetchAPI(`/scenarios${companyId ? `?company_id=${companyId}` : ''}`);
-
 export const fetchDemandDrivers = (scenarioId: string) =>
   fetchAPI(`/demand-drivers?scenario_id=${scenarioId}`);
 
-export const fetchKpiProjections = () =>
-  fetchAPI('/kpi-projections');
-
 export const fetchCapexPlans = (scenarioId?: string) =>
   fetchAPI(`/capex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
-export const fetchWorkingCapital = (scenarioId?: string) =>
-  fetchAPI(`/working-capital-policies${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
-export const fetchDriverExplainability = (scenarioId: string) =>
-  fetchAPI(`/driver-explainability?scenario_id=${scenarioId}`);
 
 export const fetchPricePlans = (scenarioId?: string) =>
   fetchAPI(`/price-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
@@ -117,18 +105,6 @@ export const upsertWorkingCapitalPolicies = (policies: any) =>
     body: JSON.stringify(policies),
   });
 
-export const fetchOpexPlans = (scenarioId?: string) =>
-  fetchAPI(`/opex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
-export const upsertOpexPlans = (plans: any) =>
-  fetchAPI('/opex-plans', {
-    method: 'POST',
-    body: JSON.stringify(plans),
-  });
-
-export const fetchUnitCostProfiles = (scenarioId?: string) =>
-  fetchAPI(`/unit-cost-profiles${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
 export const upsertUnitCostProfiles = (profiles: any) =>
   fetchAPI('/unit-cost-profiles', {
     method: 'POST',
@@ -147,12 +123,6 @@ export const upsertFundingParameters = (params: any) =>
 export const fetchRolloutPlans = (scenarioId?: string) =>
   fetchAPI(`/rollout-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
 
-export const upsertRolloutPlans = (plans: any) =>
-  fetchAPI('/rollout-plans', {
-    method: 'POST',
-    body: JSON.stringify(plans),
-  });
-
 export const triggerCompute = (payload: {
   scenario_id: string;
   assumption_set_id: string;
@@ -169,12 +139,6 @@ export const pollJob = (jobId: string) =>
 
 export const fetchRiskScenarios = (scenarioId: string) =>
   fetchAPI(`/risk-scenarios?scenario_id=${scenarioId}`);
-
-export const upsertRiskScenarios = (payload: { scenario_id: string; risks: any[] }) =>
-  fetchAPI('/risk-scenarios/upsert', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
 
 export const triggerSimulation = (payload: {
   scenario_id: string;
