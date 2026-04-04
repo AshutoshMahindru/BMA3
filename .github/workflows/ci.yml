@@ -25,6 +25,10 @@ jobs:
       - name: Validate SpecOS integrity
         run: cd specos && python3 validate_specos.py
 
+      - name: Check spec compliance
+        run: python3 scripts/spec-compliance.py
+        continue-on-error: true  # advisory until refactor completes
+
   # ── Web (Next.js) ────────────────────────────────────────
   web:
     name: 🌐 Web — Lint, Type Check & Build
