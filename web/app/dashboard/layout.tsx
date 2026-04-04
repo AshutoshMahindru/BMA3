@@ -24,22 +24,24 @@ const navGroups = [
       { label: 'Executive Cockpit',     href: '/dashboard/executive' },
       { label: 'Scenario Comparison',   href: '/dashboard/analysis/compare' },
       { label: 'Cash & Funding',        href: '/dashboard/cash' },
-      { label: 'Capital Strategy',      href: '/dashboard/capital' },
+      { label: 'Capital Strategy',      href: '/dashboard/capital-strategy' },
     ]
   },
   { key: 'assumptions', label: 'Assumptions',    icon: Settings2,       href: '/dashboard/assumptions',
     children: [
       { label: 'Demand Assumptions',    href: '/dashboard/assumptions' },
       { label: 'Confidence Tracker',    href: '/dashboard/confidence' },
+      { label: 'Scope Review',          href: '/dashboard/scope/review' },
     ]
   },
   { key: 'financials',  label: 'Financials',     icon: DollarSign,      href: '/dashboard/pnl',
     children: [
       { label: 'P&L Console',           href: '/dashboard/pnl' },
-      { label: 'Cash Flow Console',     href: '/dashboard/cashflow' },
+      { label: 'Cash Flow Console',     href: '/dashboard/cash-flow' },
       { label: 'Balance Sheet',         href: '/dashboard/balance-sheet' },
       { label: 'Unit Economics',        href: '/dashboard/unit-economics' },
       { label: 'Driver Explainability', href: '/dashboard/explainability' },
+      { label: 'Compute Center',        href: '/dashboard/compute/center' },
     ]
   },
   { key: 'markets',     label: 'Markets',        icon: MapPin,          href: '/dashboard/markets',
@@ -52,7 +54,7 @@ const navGroups = [
   { key: 'risk',        label: 'Risk & Sim',     icon: Shield,          href: '/dashboard/risk',
     children: [
       { label: 'Risk Dashboard',        href: '/dashboard/risk' },
-      { label: 'Simulation Lab',        href: '/dashboard/simulations' },
+      { label: 'Simulation Lab',        href: '/dashboard/simulation' },
       { label: 'Triggers & Alerts',     href: '/dashboard/triggers' },
     ]
   },

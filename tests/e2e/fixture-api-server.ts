@@ -41,6 +41,41 @@ type VersionRecord = {
   updated_at: string;
 };
 
+type ScopeBundleRecord = {
+  id: string;
+  company_id: string;
+  scenario_id: string;
+  version_id: string;
+  name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type ComputeRunRecord = {
+  id: string;
+  company_id: string;
+  scenario_id: string;
+  version_id: string;
+  trigger_type: string;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+  metadata: Record<string, unknown>;
+};
+
+type ComputeRunStepRecord = {
+  id: string;
+  compute_run_id: string;
+  step_code: string;
+  step_label: string;
+  step_order: number;
+  status: string;
+  started_at: string;
+  completed_at: string;
+  output_summary: Record<string, unknown>;
+};
+
 const tenantId = '10000000-0000-4000-8000-000000000001';
 const companyId = '10000000-0000-4000-8000-000000000111';
 const calendarId = '10000000-0000-4000-8000-000000000211';
@@ -109,6 +144,129 @@ const versions: VersionRecord[] = [
   },
 ];
 
+const scopeBundles: ScopeBundleRecord[] = [
+  {
+    id: '66000000-0000-4000-8000-000000000111',
+    company_id: companyId,
+    scenario_id: scenarios[0].id,
+    version_id: versions[0].id,
+    name: 'FY26 Core Rollout',
+    status: 'active',
+    created_at: '2026-04-02T06:00:00.000Z',
+    updated_at: '2026-04-02T06:00:00.000Z',
+  },
+  {
+    id: '66000000-0000-4000-8000-000000000112',
+    company_id: companyId,
+    scenario_id: scenarios[1].id,
+    version_id: versions[1].id,
+    name: 'Upside Expansion Scope',
+    status: 'draft',
+    created_at: '2026-04-03T06:00:00.000Z',
+    updated_at: '2026-04-03T06:00:00.000Z',
+  },
+];
+
+const scopeBundleCounts = new Map<string, number>([
+  [scopeBundles[0].id, 3],
+  [scopeBundles[1].id, 4],
+]);
+
+const computeRuns: ComputeRunRecord[] = [
+  {
+    id: '72000000-0000-4000-8000-000000000111',
+    company_id: companyId,
+    scenario_id: scenarios[0].id,
+    version_id: versions[0].id,
+    trigger_type: 'manual',
+    status: 'completed',
+    created_at: '2026-04-03T10:15:00.000Z',
+    completed_at: '2026-04-03T10:17:30.000Z',
+    metadata: {
+      warnings: [],
+      outputCounts: {
+        pnl: 12,
+        cashflow: 12,
+        balanceSheet: 12,
+        unitEconomics: 12,
+        kpis: 6,
+        explainability: 4,
+      },
+    },
+  },
+  {
+    id: '72000000-0000-4000-8000-000000000112',
+    company_id: companyId,
+    scenario_id: scenarios[0].id,
+    version_id: versions[0].id,
+    trigger_type: 'compare_prep',
+    status: 'queued',
+    created_at: '2026-04-04T08:00:00.000Z',
+    completed_at: null,
+    metadata: {
+      warnings: ['No seeded financial projections were found for this scenario.'],
+      outputCounts: {},
+    },
+  },
+];
+
+const computeRunSteps = new Map<string, ComputeRunStepRecord[]>([
+  [
+    computeRuns[0].id,
+    [
+      {
+        id: '73000000-0000-4000-8000-000000000111',
+        compute_run_id: computeRuns[0].id,
+        step_code: 'planning_spine',
+        step_label: 'Resolve planning context',
+        step_order: 1,
+        status: 'completed',
+        started_at: '2026-04-03T10:15:00.000Z',
+        completed_at: '2026-04-03T10:15:20.000Z',
+        output_summary: { companyId, scenarioId: scenarios[0].id, versionId: versions[0].id },
+      },
+      {
+        id: '73000000-0000-4000-8000-000000000112',
+        compute_run_id: computeRuns[0].id,
+        step_code: 'aggregate_financials',
+        step_label: 'Aggregate seeded projections',
+        step_order: 2,
+        status: 'completed',
+        started_at: '2026-04-03T10:15:20.000Z',
+        completed_at: '2026-04-03T10:16:20.000Z',
+        output_summary: { pnl: 12, cashflow: 12, balanceSheet: 12 },
+      },
+      {
+        id: '73000000-0000-4000-8000-000000000113',
+        compute_run_id: computeRuns[0].id,
+        step_code: 'finalize',
+        step_label: 'Finalize compute run',
+        step_order: 3,
+        status: 'completed',
+        started_at: '2026-04-03T10:16:20.000Z',
+        completed_at: '2026-04-03T10:17:30.000Z',
+        output_summary: { warningCount: 0 },
+      },
+    ],
+  ],
+  [
+    computeRuns[1].id,
+    [
+      {
+        id: '73000000-0000-4000-8000-000000000114',
+        compute_run_id: computeRuns[1].id,
+        step_code: 'planning_spine',
+        step_label: 'Resolve planning context',
+        step_order: 1,
+        status: 'queued',
+        started_at: '',
+        completed_at: '',
+        output_summary: {},
+      },
+    ],
+  ],
+]);
+
 const periods = [
   { id: '50000000-0000-4000-8000-000000000111', name: 'Jan 2026', start_date: '2026-01-01', end_date: '2026-01-31', period_type: 'month', sequence_order: 1, calendar_id: calendarId },
   { id: '50000000-0000-4000-8000-000000000112', name: 'Feb 2026', start_date: '2026-02-01', end_date: '2026-02-28', period_type: 'month', sequence_order: 2, calendar_id: calendarId },
@@ -154,6 +312,10 @@ function result(rows: Array<Record<string, unknown>> = []): RowResult {
 
 function nextUuid(seed: number) {
   return `00000000-0000-4000-8000-${String(seed).padStart(12, '0')}`;
+}
+
+function countResult(count: number, key = 'count'): RowResult {
+  return result([{ [key]: count }]);
 }
 
 async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowResult> {
@@ -246,6 +408,22 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return result(sensitivityRows);
   }
 
+  if (sql.includes('SELECT pv.id, pv.company_id, pv.scenario_id, pv.assumption_set_id, pv.status, pv.is_frozen') && sql.includes('FROM plan_versions pv')) {
+    const version = versions.find(
+      (row) => row.id === String(params[0]) && row.company_id === String(params[1]) && row.scenario_id === String(params[2]),
+    );
+    return version
+      ? result([{
+          id: version.id,
+          company_id: version.company_id,
+          scenario_id: version.scenario_id,
+          assumption_set_id: version.assumption_set_id,
+          status: version.status,
+          is_frozen: version.is_frozen,
+        }])
+      : result();
+  }
+
   if (sql.includes('FROM format_taxonomy_nodes t')) {
     return result(scopeRows.formats);
   }
@@ -281,8 +459,201 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return result([{ total: 2 }]);
   }
 
+  if (sql.includes('FROM scope_bundles sb') && sql.includes('dimension_count') && sql.includes('ORDER BY sb.created_at DESC')) {
+    const filtered = scopeBundles
+      .filter((bundle) => bundle.company_id === String(params[0]))
+      .filter((bundle) => !params[3] || bundle.scenario_id === String(params[3]))
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .map((bundle) => ({
+        id: bundle.id,
+        name: bundle.name,
+        status: bundle.status,
+        dimension_count: scopeBundleCounts.get(bundle.id) || 0,
+      }));
+    return result(filtered);
+  }
+
+  if (sql.includes('SELECT id FROM scope_bundles WHERE id::text = $1 AND company_id::text = $2 AND is_deleted = FALSE')) {
+    const bundle = scopeBundles.find((row) => row.id === String(params[0]) && row.company_id === String(params[1]));
+    return bundle ? result([{ id: bundle.id }]) : result();
+  }
+
+  if (sql.includes('SELECT id FROM scope_bundles WHERE id::text = $1 AND is_deleted = FALSE')) {
+    const bundle = scopeBundles.find((row) => row.id === String(params[0]));
+    return bundle ? result([{ id: bundle.id }]) : result();
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS cnt FROM scope_bundle_items WHERE scope_bundle_id::text = $1')) {
+    return result([{ cnt: scopeBundleCounts.get(String(params[0])) || 0 }]);
+  }
+
   if (sql.includes('FROM scope_bundle_items sbi') && sql.includes('GROUP BY sbi.dimension_family')) {
     return result([{ dimension_family: 'formats', cnt: 2 }, { dimension_family: 'geography', cnt: 1 }]);
+  }
+
+  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {
+    const companyFilter = String(params[0]);
+    const scenarioFilter = String(params[1]);
+    const versionFilter = params.length > 4 ? String(params[2]) : null;
+    const statusFilter = params.length > 5 ? String(params[3]) : null;
+    const rows = computeRuns
+      .filter((run) => run.company_id === companyFilter && run.scenario_id === scenarioFilter)
+      .filter((run) => !versionFilter || run.version_id === versionFilter)
+      .filter((run) => !statusFilter || run.status === statusFilter)
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .map((run) => ({
+        id: run.id,
+        status: run.status,
+        trigger_type: run.trigger_type,
+        created_at: run.created_at,
+        completed_at: run.completed_at,
+      }));
+    return result(rows);
+  }
+
+  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE id::text = $1')) {
+    const run = computeRuns.find((row) => row.id === String(params[0]));
+    return run
+      ? result([{
+          id: run.id,
+          status: run.status,
+          trigger_type: run.trigger_type,
+          created_at: run.created_at,
+          completed_at: run.completed_at,
+        }])
+      : result();
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status = \'completed\')::int AS completed FROM compute_run_steps')) {
+    const runId = String(params[0]);
+    const steps = computeRunSteps.get(runId) || [];
+    return result([{ total: steps.length, completed: steps.filter((step) => step.status === 'completed').length }]);
+  }
+
+  if (sql.includes('SELECT id, step_label, status, started_at, completed_at, COALESCE(EXTRACT(EPOCH FROM (completed_at - started_at)) * 1000, 0) AS duration_ms FROM compute_run_steps')) {
+    const runId = String(params[0]);
+    const rows = (computeRunSteps.get(runId) || []).map((step) => ({
+      id: step.id,
+      step_label: step.step_label,
+      status: step.status,
+      started_at: step.started_at || null,
+      completed_at: step.completed_at || null,
+      duration_ms: step.started_at && step.completed_at
+        ? Math.max(new Date(step.completed_at).getTime() - new Date(step.started_at).getTime(), 0)
+        : 0,
+    }));
+    return result(rows);
+  }
+
+  if (sql.includes('SELECT id, status, metadata FROM compute_runs') && sql.includes('WHERE id::text = $1')) {
+    const run = computeRuns.find((row) => row.id === String(params[0]));
+    return run ? result([{ id: run.id, status: run.status, metadata: run.metadata }]) : result();
+  }
+
+  if (sql.includes('SELECT id, status, completed_at, metadata FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {
+    const companyFilter = String(params[0]);
+    const scenarioFilter = params[1] ? String(params[1]) : null;
+    const run = computeRuns
+      .filter((row) => row.company_id === companyFilter)
+      .filter((row) => !scenarioFilter || row.scenario_id === scenarioFilter)
+      .sort((left, right) => {
+        const leftDate = left.completed_at || left.created_at;
+        const rightDate = right.completed_at || right.created_at;
+        return rightDate.localeCompare(leftDate);
+      })[0];
+    return run ? result([{ id: run.id, status: run.status, completed_at: run.completed_at, metadata: run.metadata }]) : result();
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM pnl_projections WHERE scenario_id::text = $1')) {
+    return countResult(12);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM cashflow_projections WHERE scenario_id::text = $1')) {
+    return countResult(12);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM balance_sheet_projections WHERE scenario_id::text = $1')) {
+    return countResult(12);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM unit_economics_projections WHERE scenario_id::text = $1')) {
+    return countResult(12);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM kpi_projections WHERE scenario_id::text = $1')) {
+    return countResult(6);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS count FROM driver_explainability WHERE scenario_id::text = $1')) {
+    return countResult(4);
+  }
+
+  if (sql.includes('INSERT INTO compute_runs') && sql.includes('RETURNING id, trigger_type, status, created_at, completed_at')) {
+    const createdAt = '2026-04-05T11:30:00.000Z';
+    const run: ComputeRunRecord = {
+      id: String(params[0]),
+      company_id: String(params[1]),
+      scenario_id: String(params[2]),
+      version_id: String(params[3]),
+      trigger_type: String(params[4]),
+      status: 'completed',
+      created_at: createdAt,
+      completed_at: createdAt,
+      metadata: JSON.parse(String(params[6])),
+    };
+    computeRuns.unshift(run);
+    computeRunSteps.set(run.id, []);
+    return result([{
+      id: run.id,
+      trigger_type: run.trigger_type,
+      status: run.status,
+      created_at: run.created_at,
+      completed_at: run.completed_at,
+    }]);
+  }
+
+  if (sql.includes('INSERT INTO compute_run_steps')) {
+    const runId = String(params[0]);
+    const steps = computeRunSteps.get(runId) || [];
+    steps.push({
+      id: nextUuid(7400 + steps.length + 1),
+      compute_run_id: runId,
+      step_code: String(params[1]),
+      step_label: String(params[2]),
+      step_order: Number(params[3]),
+      status: 'completed',
+      started_at: '2026-04-05T11:30:00.000Z',
+      completed_at: '2026-04-05T11:30:10.000Z',
+      output_summary: JSON.parse(String(params[4])),
+    });
+    computeRunSteps.set(runId, steps);
+    return result();
+  }
+
+  if (sql.includes('INSERT INTO compute_run_artifacts') || sql.includes('INSERT INTO compute_dependency_snapshots')) {
+    return result();
+  }
+
+  if (sql.includes('SELECT id, status, metadata FROM compute_runs WHERE id::text = $1')) {
+    const run = computeRuns.find((row) => row.id === String(params[0]));
+    return run ? result([{ id: run.id, status: run.status, metadata: run.metadata }]) : result();
+  }
+
+  if (sql.includes('UPDATE compute_runs SET status = \'cancelled\'')) {
+    const run = computeRuns.find((row) => row.id === String(params[0]));
+    if (!run) {
+      return result();
+    }
+    run.status = 'cancelled';
+    run.completed_at = '2026-04-05T11:40:00.000Z';
+    run.metadata = JSON.parse(String(params[1]));
+    return result([{
+      id: run.id,
+      status: run.status,
+      trigger_type: run.trigger_type,
+      created_at: run.created_at,
+      completed_at: run.completed_at,
+    }]);
   }
 
   if (sql.includes('INSERT INTO scenarios (tenant_id, company_id, name, scenario_type, description, base_scenario_id)')) {

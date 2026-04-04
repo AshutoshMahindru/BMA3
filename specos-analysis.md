@@ -8,6 +8,7 @@
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
 | `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
 | Test count | 117 | **119** (+2 contract/integration tests on top of earlier route coverage) |
+| Playwright dashboard smoke | **3/3** | **5/5** (scenario compare, scope editors, scope review, compute center, wizard) |
 | Compliant code routes | 107 | **114** |
 
 ---
@@ -19,7 +20,7 @@
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
 | Jest suite | **119/119 passing** |
-| Playwright E2E | **3/3 passing** |
+| Playwright E2E | **5/5 passing** |
 | Wave status | Wave 5 **PARTIAL** (Docker runtime verification pending locally) |
 
 ---
@@ -44,7 +45,7 @@
 
 ---
 
-## Frontend: 21 dashboard pages plus root landing page
+## Frontend: 26 dashboard pages plus root landing page
 
 Several earlier “mismatches” are now explicit canonical `dashboard_path` mappings in SpecOS, so they should be treated as aligned rather than drift.
 
@@ -63,21 +64,19 @@ Several earlier “mismatches” are now explicit canonical `dashboard_path` map
 | Plan Version Manager | `/dashboard/versions` | `web/app/dashboard/versions/page.tsx` |
 | Planning Governance Dashboard | `/dashboard/governance` | `web/app/dashboard/governance/page.tsx` |
 
-### Remaining slug divergences — page exists, slug differs from canonical route
+### Canonical route aliases live for slug-drift surfaces
 
 | Canonical slug | Actual dir | Note |
 |---|---|---|
-| `cash-flow` | `cashflow/` | hyphen dropped |
-| `capital-strategy` | `capital/` | truncated |
-| `simulation` | `simulations/` | pluralized |
+| `cash-flow` | `cashflow/` | Canonical path resolves via `web/next.config.mjs` rewrite |
+| `capital-strategy` | `capital/` | Canonical path resolves via `web/next.config.mjs` rewrite |
+| `simulation` | `simulations/` | Canonical path resolves via `web/next.config.mjs` rewrite |
 
 ### Remaining frontend gaps
 
 | Gap type | Surface |
 |---|---|
 | Consolidated into one tabbed page | Demand / Cost / Funding / Working Capital assumptions live inside `assumptions/page.tsx` |
-| Missing routed page | Scope Review Surface |
-| Missing routed page | Compute Center |
 | Missing overlay pattern | AI SME overlays (2) |
 
 ---
@@ -107,7 +106,7 @@ The real orchestrator runs in the integration suite, but the current golden harn
 | Item | Status |
 |---|---|
 | `db/migrations/` tooling (node-pg-migrate) | **DONE** — root scripts + `scripts/migrate.mjs` + baseline scaffold |
-| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, and wizard smoke flows |
+| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, scope review, compute center, and wizard smoke flows |
 | Full `docker-compose` stack (Redis, worker) | **PARTIAL** — full stack is defined, but local boot verification is blocked until Docker is available |
 
 ---
@@ -116,7 +115,5 @@ The real orchestrator runs in the integration suite, but the current golden harn
 
 | # | Gap | Effort |
 |---|---|---|
-| 1 | `dashboard/scope/review/` page | Medium |
-| 2 | `dashboard/compute/center/` page | Low |
-| 3 | AI SME overlay patterns (2) | Medium |
-| 4 | Local `docker compose up` runtime verification once Docker is available | Low |
+| 1 | AI SME overlay patterns (2) | Medium |
+| 2 | Local `docker compose up` runtime verification once Docker is available | Low |
