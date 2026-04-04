@@ -2,32 +2,10 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// ── Legacy Phase 1–4 routes (kept for backward compat; will be removed in Wave 4) ──
-import companiesRouter from './routes/v1/companies';
-import planningCalendarsRouter from './routes/v1/planning-calendars';
-import scenariosRouter from './routes/v1/scenarios';
-import demandDriversRouter from './routes/v1/demand-drivers';
-import pricePlansRouter from './routes/v1/price-plans';
-import mixPlansRouter from './routes/v1/mix-plans';
-import unitCostProfilesRouter from './routes/v1/unit-cost-profiles';
-import laborModelsRouter from './routes/v1/labor-models';
-import opexPlansRouter from './routes/v1/opex-plans';
-import marketingPlansRouter from './routes/v1/marketing-plans';
-import capexPlansRouter from './routes/v1/capex-plans';
-import workingCapitalPoliciesRouter from './routes/v1/working-capital-policies';
-import financialProjectionsRouter from './routes/v1/financial-projections';
-import unitEconomicsRouter from './routes/v1/unit-economics';
-import kpiProjectionsRouter from './routes/v1/kpi-projections';
-import driverExplainabilityRouter from './routes/v1/driver-explainability';
-import fundingParametersRouter from './routes/v1/funding-parameters';
-import rolloutPlansRouter from './routes/v1/rollout-plans';
-import riskScenariosRouter from './routes/v1/risk-scenarios';
-import simulationRunsRouter from './routes/v1/simulation-runs';
-
 // ── BullMQ worker — must be imported before routes so the worker process starts ──
 import './jobs';
 
-// ── New SpecOS-aligned routes (Wave 3 — BMA3 modelling engine) ──
+// ── SpecOS-aligned routes (canonical namespace) ──
 import contextRouter from './routes/v1/context';
 import assumptionsRouter from './routes/v1/assumptions';
 import financialsRouter from './routes/v1/financials';
@@ -42,54 +20,20 @@ app.use(cors());
 app.use(express.json());
 
 // ════════════════════════════════════════════════════════════════════════════════
-// SpecOS-aligned routes (canonical namespace — preferred)
+// SpecOS-aligned routes — all endpoints from api_contracts.json
 // ════════════════════════════════════════════════════════════════════════════════
 app.use('/api/v1/context', contextRouter);
 app.use('/api/v1/assumptions', assumptionsRouter);
 app.use('/api/v1/financials', financialsRouter);
 app.use('/api/v1/compute', computeRouter);
 
-// ════════════════════════════════════════════════════════════════════════════════
-// Legacy Phase 1 routes (will be removed in Wave 4)
-// ════════════════════════════════════════════════════════════════════════════════
-app.use('/api/v1/companies', companiesRouter);
-app.use('/api/v1/planning-calendars', planningCalendarsRouter);
-app.use('/api/v1/scenarios', scenariosRouter);
-
-// Legacy Phase 2 routes (Sprint 2.1 & 2.2)
-app.use('/api/v1/demand-drivers', demandDriversRouter);
-app.use('/api/v1/price-plans', pricePlansRouter);
-app.use('/api/v1/mix-plans', mixPlansRouter);
-app.use('/api/v1/unit-cost-profiles', unitCostProfilesRouter);
-app.use('/api/v1/labor-models', laborModelsRouter);
-
-// Legacy Phase 2 routes (Sprint 2.3 & 2.4)
-app.use('/api/v1/opex-plans', opexPlansRouter);
-app.use('/api/v1/marketing-plans', marketingPlansRouter);
-app.use('/api/v1/capex-plans', capexPlansRouter);
-app.use('/api/v1/working-capital-policies', workingCapitalPoliciesRouter);
-
-// Legacy Phase 2 routes (Sprint 2.5 & 2.6)
-app.use('/api/v1/financial-projections', financialProjectionsRouter);
-app.use('/api/v1/unit-economics', unitEconomicsRouter);
-app.use('/api/v1/kpi-projections', kpiProjectionsRouter);
-
-// Legacy Phase 3 routes (Sprint 3.2)
-app.use('/api/v1/driver-explainability', driverExplainabilityRouter);
-app.use('/api/v1/funding-parameters', fundingParametersRouter);
-app.use('/api/v1/rollout-plans', rolloutPlansRouter);
-
-// Legacy Phase 4 routes (Sprint 4.1-4.4)
-app.use('/api/v1/risk-scenarios', riskScenariosRouter);
-app.use('/api/v1/simulation-runs', simulationRunsRouter);
-
 // Health check
-app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'OK', message: 'BMA3 API is running' });
+app.get('/api/v1/health', (_req, res) => {
+  res.json({ status: 'OK', message: 'BMA3 API is running', version: '2.0' });
 });
 
-// Standard Error Envelope response
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+// Standard Error Envelope
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err.stack);
   res.status(err.status || 500).json({
     error: {
