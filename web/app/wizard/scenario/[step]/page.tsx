@@ -50,20 +50,21 @@ function buildHref(step: WizardStepKey, params: Record<string, string>) {
 export default function ScenarioWizardPage({ params }: { params: { step: string } }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const safeSearchParams = searchParams || new URLSearchParams();
   const currentStep = (WIZARD_STEPS.find((step) => step.key === params.step)?.key || 'start') as WizardStepKey;
 
   const [companies, setCompanies] = useState<Company[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
-  const [companyId, setCompanyId] = useState(searchParams.get('companyId') || '');
-  const [scenarioName, setScenarioName] = useState(searchParams.get('scenarioName') || '');
-  const [description, setDescription] = useState(searchParams.get('description') || '');
-  const [versionLabel, setVersionLabel] = useState(searchParams.get('versionLabel') || 'Working Draft v1');
-  const [baseScenarioId, setBaseScenarioId] = useState(searchParams.get('baseScenarioId') || '');
+  const [companyId, setCompanyId] = useState(safeSearchParams.get('companyId') || '');
+  const [scenarioName, setScenarioName] = useState(safeSearchParams.get('scenarioName') || '');
+  const [description, setDescription] = useState(safeSearchParams.get('description') || '');
+  const [versionLabel, setVersionLabel] = useState(safeSearchParams.get('versionLabel') || 'Working Draft v1');
+  const [baseScenarioId, setBaseScenarioId] = useState(safeSearchParams.get('baseScenarioId') || '');
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ tone: 'success' | 'warning' | 'error'; text: string } | null>(null);
 
-  const scenarioId = searchParams.get('scenarioId') || '';
-  const versionId = searchParams.get('versionId') || '';
+  const scenarioId = safeSearchParams.get('scenarioId') || '';
+  const versionId = safeSearchParams.get('versionId') || '';
 
   useEffect(() => {
     let cancelled = false;

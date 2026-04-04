@@ -8,7 +8,7 @@
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
 | `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
 | Test count | 117 | **123** (+6 contract/integration tests on top of earlier route coverage) |
-| Playwright dashboard smoke | **3/3** | **9/9** (assumptions overview, assumptions family surface, scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, wizard) |
+| Playwright dashboard smoke | **3/3** | **11/11** (assumptions overview, assumptions family surface, stateful assumptions save, scenario compare, scope editors, scope review, compute center, stateful compute run start, executive AI SME, P&L AI SME, wizard) |
 | AI SME overlays | Missing | **Implemented** — advisory overlays live in `executive/page.tsx` and `pnl/page.tsx` |
 | Compliant code routes | 107 | **114** |
 
@@ -21,7 +21,7 @@
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
 | Jest suite | **123/123 passing** |
-| Playwright E2E | **9/9 passing** |
+| Playwright E2E | **11/11 passing** |
 | Wave status | Wave 5 **DONE** — compose-hosted runtime verified |
 
 ---
@@ -112,7 +112,7 @@ The real orchestrator runs in the integration suite, and the live async queue pa
 | Item | Status |
 |---|---|
 | `db/migrations/` tooling (node-pg-migrate) | **DONE** — root scripts + `scripts/migrate.mjs` + baseline scaffold |
-| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — assumptions overview, assumptions family route, scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, and wizard smoke flows |
+| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — assumptions overview, assumptions family route, stateful assumptions save, scenario compare, scope editors, scope review, compute center, stateful compute run start, executive AI SME, P&L AI SME, and wizard flows |
 | Full `docker-compose` stack (Redis, worker) | **DONE** — `docker compose up -d` boots Postgres + Redis + API + worker + web locally; a compose-hosted queued compute run completes all 18 steps |
 
 ---
@@ -123,3 +123,5 @@ No remaining prioritized SpecOS parity gaps are currently tracked. The last
 runtime cleanup item was the seeded base-scenario reconciliation issue, which is
 now handled by migration
 [`006-reconcile-seeded-opening-balances.sql`](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/db/migrations/006-reconcile-seeded-opening-balances.sql).
+
+The current post-parity hardening work is focused on confidence rather than surface closure: compute-center runtime observability is now visible on the existing canonical page without adding non-spec endpoints, and the dashboard E2E suite now covers real mutation flows in addition to route load checks.
