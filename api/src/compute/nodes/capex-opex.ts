@@ -51,6 +51,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeCapexOpex(
   ctx: ComputeContext,
@@ -130,15 +131,17 @@ export async function executeCapexOpex(
 
     // Capex scheduled for period before site launch date
     if (total_capex < 0) {
-      console.warn(
-        `[capex-opex] Period ${period.label}: total_capex is negative (${total_capex.toFixed(2)}) — data error`
+      logger.warn(
+        { periodLabel: period.label, totalCapex: total_capex },
+        'Capex/opex detected negative total capex',
       );
     }
 
     // Negative EBITDA warning
     if (ebitda < 0) {
-      console.warn(
-        `[capex-opex] Period ${period.label}: Negative EBITDA (${ebitda.toFixed(2)})`
+      logger.warn(
+        { periodLabel: period.label, ebitda },
+        'Capex/opex detected negative EBITDA',
       );
     }
 
@@ -190,11 +193,17 @@ export async function executeCapexOpex(
       );
     }
 
-    console.log(
-      `[capex-opex] Period ${period.label}: ` +
-      `ebitda=${ebitda.toFixed(2)}, ebit=${ebit.toFixed(2)}, ` +
-      `ebt=${ebt.toFixed(2)}, tax=${tax_expense.toFixed(2)}, ` +
-      `net_income=${net_income.toFixed(2)}, total_capex=${total_capex.toFixed(2)}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        ebitda,
+        ebit,
+        ebt,
+        taxExpense: tax_expense,
+        netIncome: net_income,
+        totalCapex: total_capex,
+      },
+      'Capex/opex computed for period',
     );
   }
 }

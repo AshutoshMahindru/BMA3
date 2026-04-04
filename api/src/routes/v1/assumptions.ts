@@ -2,11 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
-import { idSchema, uuidSchema } from './_shared';
+import { idSchema, requireTenantId } from './_shared';
 
 const router = Router();
-
-const DEFAULT_TENANT_ID = '10000000-0000-4000-8000-000000000001';
 
 const AssumptionSetCreateBody = z.object({
   companyId: idSchema,
@@ -60,11 +58,6 @@ const OverrideCreateBody = z.object({
 
 function traceId(req: Request): string {
   return (req.headers['x-trace-id'] as string) || 'no-trace-id';
-}
-
-function tenantId(req: Request): string {
-  const value = req.headers['x-tenant-id'] as string | undefined;
-  return value && uuidSchema.safeParse(value).success ? value : DEFAULT_TENANT_ID;
 }
 
 function meta() {
@@ -195,14 +188,14 @@ router.post('/sets', validate(AssumptionSetCreateBody), async (req: Request, res
       `INSERT INTO assumption_sets (tenant_id, scenario_id, name, is_active, overall_confidence, review_cadence)
        VALUES ($1, $2, $3, TRUE, 'medium', 'Monthly')
        RETURNING id, name, is_active, created_at`,
-      [scenario.rows[0].tenant_id || tenantId(req), scenarioId, name],
+      [scenario.rows[0].tenant_id || requireTenantId(req), scenarioId, name],
     );
 
     if (baseSetId) {
       await client.query(
         `INSERT INTO assumption_lineage (tenant_id, assumption_set_id, parent_assumption_set_id, change_reason)
          VALUES ($1, $2, $3, 'Created from base assumption set')`,
-        [scenario.rows[0].tenant_id || tenantId(req), created.rows[0].id, baseSetId],
+        [scenario.rows[0].tenant_id || requireTenantId(req), created.rows[0].id, baseSetId],
       );
     }
 

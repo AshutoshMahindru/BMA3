@@ -16,6 +16,9 @@ module.exports = {
       },
     }],
   },
+  moduleNameMapper: {
+    '^uuid$': '<rootDir>/tests/support/uuid.ts',
+  },
   testMatch: ['**/tests/**/*.test.ts'],
   verbose: true,
 };

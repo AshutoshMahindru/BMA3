@@ -34,6 +34,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -356,10 +357,7 @@ export async function executeSensitivityRisk(
     })
     .sort((a, b) => b.max_impact_pct - a.max_impact_pct);
 
-  console.log('[sensitivity-risk] Tornado ranking (top to bottom):');
-  for (const rank of tornadoRanking) {
-    console.log(`  ${rank.driver}: ${(rank.max_impact_pct * 100).toFixed(1)}% max EBITDA impact`);
-  }
+  logger.info({ tornadoRanking }, 'Sensitivity-risk tornado ranking computed');
 
   // ══════════════════════════════════════════════════════════════════════════
   // 2. THRESHOLD ANALYSIS
@@ -385,10 +383,14 @@ export async function executeSensitivityRisk(
         headroom_pct: headroomPct,
       });
 
-      console.log(
-        `[sensitivity-risk] Threshold ${driver.name}: ` +
-        `current=${currentValue.toFixed(2)}, threshold=${thresholdValue.toFixed(2)}, ` +
-        `headroom=${(headroomPct * 100).toFixed(1)}%`
+      logger.info(
+        {
+          driver: driver.name,
+          currentValue,
+          thresholdValue,
+          headroomPct,
+        },
+        'Sensitivity-risk threshold computed',
       );
     }
   }
@@ -484,11 +486,16 @@ export async function executeSensitivityRisk(
     max_ebitda: mcEbitdaResults[mcEbitdaResults.length - 1],
   };
 
-  console.log(
-    `[sensitivity-risk] Monte Carlo (${MC_ITERATIONS} iterations): ` +
-    `mean=${mcSummary.mean_ebitda.toFixed(0)}, ` +
-    `P10=${mcSummary.p10.toFixed(0)}, P50=${mcSummary.p50.toFixed(0)}, P90=${mcSummary.p90.toFixed(0)}, ` +
-    `P(EBITDA<0)=${(mcSummary.prob_negative * 100).toFixed(1)}%`
+  logger.info(
+    {
+      iterations: MC_ITERATIONS,
+      meanEbitda: mcSummary.mean_ebitda,
+      p10: mcSummary.p10,
+      p50: mcSummary.p50,
+      p90: mcSummary.p90,
+      probabilityNegative: mcSummary.prob_negative,
+    },
+    'Sensitivity-risk Monte Carlo summary computed',
   );
 
   // ══════════════════════════════════════════════════════════════════════════

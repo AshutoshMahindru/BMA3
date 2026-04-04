@@ -45,6 +45,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeContributionStack(
   ctx: ComputeContext,
@@ -117,26 +118,26 @@ export async function executeContributionStack(
     // CM layer monotonic descent (CM1 >= CM2 >= CM3 >= CM4) when all costs non-negative
     if (variable_marketing_promo >= 0 && variable_labor_fulfillment >= 0 && site_controllable_opex >= 0) {
       if (cm1 < cm2 || cm2 < cm3 || cm3 < cm4) {
-        console.warn(
-          `[contribution-stack] Period ${period.label}: CM layers not monotonically descending. ` +
-          `CM1=${cm1.toFixed(2)}, CM2=${cm2.toFixed(2)}, CM3=${cm3.toFixed(2)}, CM4=${cm4.toFixed(2)}`
+        logger.warn(
+          { periodLabel: period.label, cm1, cm2, cm3, cm4 },
+          'Contribution stack detected non-monotonic CM descent',
         );
       }
     }
 
     // Negative CM1 = COGS exceeds net revenue
     if (cm1 < 0) {
-      console.warn(
-        `[contribution-stack] Period ${period.label}: Negative CM1 (${cm1.toFixed(2)}) — ` +
-        `COGS (${cogs.toFixed(2)}) exceeds net_revenue (${net_revenue.toFixed(2)})`
+      logger.warn(
+        { periodLabel: period.label, cm1, cogs, netRevenue: net_revenue },
+        'Contribution stack detected negative CM1',
       );
     }
 
     // Missing cost assumptions for grains with revenue
     if (net_revenue > 0 && cogs_per_unit === 0) {
-      console.warn(
-        `[contribution-stack] Period ${period.label}: cogs_per_unit is 0 but ` +
-        `net_revenue=${net_revenue.toFixed(2)} — missing cost assumptions?`
+      logger.warn(
+        { periodLabel: period.label, cogsPerUnit: cogs_per_unit, netRevenue: net_revenue },
+        'Contribution stack found zero COGS assumption on revenue-bearing period',
       );
     }
 
@@ -186,10 +187,18 @@ export async function executeContributionStack(
       );
     }
 
-    console.log(
-      `[contribution-stack] Period ${period.label}: ` +
-      `cogs=${cogs.toFixed(2)}, cm1=${cm1.toFixed(2)} (${(cm1_margin * 100).toFixed(1)}%), ` +
-      `cm2=${cm2.toFixed(2)}, cm3=${cm3.toFixed(2)}, cm4=${cm4.toFixed(2)} (${(cm4_margin * 100).toFixed(1)}%)`
+    logger.info(
+      {
+        periodLabel: period.label,
+        cogs,
+        cm1,
+        cm1MarginPct: cm1_margin * 100,
+        cm2,
+        cm3,
+        cm4,
+        cm4MarginPct: cm4_margin * 100,
+      },
+      'Contribution stack computed for period',
     );
   }
 }

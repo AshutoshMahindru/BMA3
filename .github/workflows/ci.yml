@@ -27,7 +27,27 @@ jobs:
 
       - name: Check spec compliance
         run: python3 scripts/spec-compliance.py
-        continue-on-error: true  # advisory until refactor completes
+
+  tests:
+    name: 🧪 Tests — Contract & Integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install root test dependencies
+        run: npm ci
+
+      - name: Run Jest suite
+        run: npm test -- --runInBand
 
   # ── Web (Next.js) ────────────────────────────────────────
   web:

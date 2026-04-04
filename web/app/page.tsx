@@ -3,14 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from 'next/link';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || 'dev-local-token';
+
 export default function Home() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/v1/companies', {
+    fetch(`${API_BASE}/context/companies`, {
       headers: {
-        'x-tenant-id': 'tttttttt-0000-0000-0000-000000000001'
+        Authorization: `Bearer ${API_TOKEN}`,
       }
     })
       .then(res => res.json())

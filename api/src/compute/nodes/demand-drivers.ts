@@ -27,6 +27,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeDemandDrivers(
   ctx: ComputeContext,
@@ -71,15 +72,16 @@ export async function executeDemandDrivers(
 
     // ── Validate ──────────────────────────────────────────────────────────
     if (realized_orders > gross_demand) {
-      console.warn(
-        `[demand-drivers] Period ${period.label}: realized_orders (${realized_orders}) ` +
-        `exceeds gross_demand (${gross_demand}) — logic error`
+      logger.warn(
+        { periodLabel: period.label, realizedOrders: realized_orders, grossDemand: gross_demand },
+        'Demand drivers produced realized orders above gross demand',
       );
     }
 
     if (gross_demand === 0) {
-      console.warn(
-        `[demand-drivers] Period ${period.label}: Zero demand — check demand assumptions`
+      logger.warn(
+        { periodLabel: period.label },
+        'Demand drivers found zero gross demand',
       );
     }
 
@@ -110,10 +112,17 @@ export async function executeDemandDrivers(
       ]
     );
 
-    console.log(
-      `[demand-drivers] Period ${period.label}: ` +
-      `gross_demand=${gross_demand}, reach=${reach_rate}, conv=${conversion_rate}, ` +
-      `cap_factor=${capacity_factor} → realized_orders=${realized_orders}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        grossDemand: gross_demand,
+        reachRate: reach_rate,
+        conversionRate: conversion_rate,
+        retentionRate: retention_rate,
+        capacityFactor: capacity_factor,
+        realizedOrders: realized_orders,
+      },
+      'Demand drivers computed for period',
     );
   }
 }

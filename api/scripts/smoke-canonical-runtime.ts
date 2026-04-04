@@ -1,5 +1,5 @@
 const API_BASE = process.env.API_BASE_URL || 'http://127.0.0.1:4000/api/v1';
-const TENANT_ID = process.env.TENANT_ID || '10000000-0000-4000-8000-000000000001';
+const API_TOKEN = process.env.API_TOKEN || 'dev-local-token';
 const REQUEST_TIMEOUT_MS = 5000;
 
 type Envelope<T> = {
@@ -25,7 +25,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        'x-tenant-id': TENANT_ID,
+        'Authorization': `Bearer ${API_TOKEN}`,
         ...(init?.headers || {}),
       },
     });

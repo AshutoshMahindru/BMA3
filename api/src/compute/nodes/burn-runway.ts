@@ -49,6 +49,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeBurnRunway(
   ctx: ComputeContext,
@@ -169,16 +170,17 @@ export async function executeBurnRunway(
     // ── Step 12: Cash buffer breach check ──────────────────────────────────
     const cash_buffer_breach = closing_cash < minimum_cash_buffer;
     if (cash_buffer_breach) {
-      console.warn(
-        `[burn-runway] Period ${period.label}: Closing cash (${closing_cash.toFixed(2)}) ` +
-        `below minimum buffer (${minimum_cash_buffer.toFixed(2)})`
+      logger.warn(
+        { periodLabel: period.label, closingCash: closing_cash, minimumCashBuffer: minimum_cash_buffer },
+        'Burn/runway detected cash buffer breach',
       );
     }
 
     // Negative closing cash = insolvency risk
     if (closing_cash < 0) {
-      console.warn(
-        `[burn-runway] Period ${period.label}: Negative closing cash (${closing_cash.toFixed(2)}) — insolvency risk`
+      logger.warn(
+        { periodLabel: period.label, closingCash: closing_cash },
+        'Burn/runway detected negative closing cash',
       );
     }
 
@@ -188,8 +190,9 @@ export async function executeBurnRunway(
 
     // Runway < 3 months = critical warning
     if (runway < 3 && runway > 0) {
-      console.warn(
-        `[burn-runway] Period ${period.label}: Runway below 3 months (${runway.toFixed(1)})`
+      logger.warn(
+        { periodLabel: period.label, runwayMonths: runway },
+        'Burn/runway detected runway below three months',
       );
     }
 
@@ -198,8 +201,9 @@ export async function executeBurnRunway(
       operating_cash_flow + investing_cash_flow + financing_cash_flow - net_change_in_cash
     );
     if (cf_check > 0.01) {
-      console.warn(
-        `[burn-runway] Period ${period.label}: Cash flow components do not reconcile. Diff: ${cf_check.toFixed(4)}`
+      logger.warn(
+        { periodLabel: period.label, reconciliationDifference: cf_check },
+        'Burn/runway found non-reconciling cash flow components',
       );
     }
 
@@ -259,12 +263,18 @@ export async function executeBurnRunway(
       );
     }
 
-    console.log(
-      `[burn-runway] Period ${period.label}: ` +
-      `ocf=${operating_cash_flow.toFixed(2)}, icf=${investing_cash_flow.toFixed(2)}, ` +
-      `fcf=${financing_cash_flow.toFixed(2)}, net_cash=${net_change_in_cash.toFixed(2)}, ` +
-      `closing=${closing_cash.toFixed(2)}, net_burn=${net_burn.toFixed(2)}, ` +
-      `runway=${runway === Infinity ? '∞' : runway.toFixed(1) + 'mo'}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        operatingCashFlow: operating_cash_flow,
+        investingCashFlow: investing_cash_flow,
+        financingCashFlow: financing_cash_flow,
+        netChangeInCash: net_change_in_cash,
+        closingCash: closing_cash,
+        netBurn: net_burn,
+        runwayMonths: Number.isFinite(runway) ? runway : null,
+      },
+      'Burn/runway computed for period',
     );
   }
 }
