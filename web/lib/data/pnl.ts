@@ -1,5 +1,16 @@
 /* STUB — temporary until Wave 2/4 API wiring. See WAVE_STATUS.md. */
-export type PnLRow = { label: string; values: number[]; isHeader?: boolean; isBold?: boolean };
+export type PnLRow = {
+  label: string;
+  values: number[];
+  isHeader?: boolean;
+  isBold?: boolean;
+  highlight?: string;
+  pctRow?: boolean;
+  indent?: boolean;
+  bold?: boolean;
+  negative?: boolean;
+  fy: number;
+};
 export type MonthlyRevenueEbitda = { month: string; revenue: number; ebitda: number };
 export const PNL_DATA: PnLRow[] = [];
 export const PNL_MONTHS: string[] = [];

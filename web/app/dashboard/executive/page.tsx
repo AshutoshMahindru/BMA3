@@ -51,8 +51,8 @@ export default function ExecutiveCockpit() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { const h=['Scenario','Revenue','EBITDA','IRR','Payback']; const r=scenarioSnapshot.map(s=>[s.scenario,s.revenue,s.ebitda,s.irr,s.payback]); exportCSV('Executive_Scenarios',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>
-          <button onClick={() => { const h=['Scenario','Revenue','EBITDA','IRR','Payback']; const r=scenarioSnapshot.map(s=>[s.scenario,s.revenue,s.ebitda,s.irr,s.payback]); exportPDF('Executive Planning Cockpit',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"><Printer className="w-3.5 h-3.5" /> PDF</button>
+          <button onClick={() => { const h=['Scenario','Revenue','EBITDA','IRR','Payback']; const r=scenarioSnapshot.map((s: any)=>[s.scenario,s.revenue,s.ebitda,s.irr,s.payback]); exportCSV('Executive_Scenarios',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>
+          <button onClick={() => { const h=['Scenario','Revenue','EBITDA','IRR','Payback']; const r=scenarioSnapshot.map((s: any)=>[s.scenario,s.revenue,s.ebitda,s.irr,s.payback]); exportPDF('Executive Planning Cockpit',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"><Printer className="w-3.5 h-3.5" /> PDF</button>
         </div>
       </div>
 
@@ -134,7 +134,7 @@ export default function ExecutiveCockpit() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {scenarioSnapshot.map((s, i) => (
+                  {scenarioSnapshot.map((s: any, i: number) => (
                     <tr key={i} className={`hover:bg-blue-50/30 transition ${i % 2 === 1 ? 'bg-[#F4F5F7]' : ''}`}>
                       <td className="px-4 py-2.5"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.badge}`}>{s.scenario}</span></td>
                       <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">AED {s.revenue}</td>

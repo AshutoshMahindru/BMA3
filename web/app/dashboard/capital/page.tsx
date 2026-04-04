@@ -112,7 +112,7 @@ export default function CapitalStrategy() {
                   {ordersRange.map((orders, ri) => (
                     <tr key={orders}>
                       <td className="text-[9px] font-bold text-gray-500 pr-2 py-1">{orders}</td>
-                      {sensitivityMatrix[ri].map((val, ci) => (
+                      {sensitivityMatrix[ri].map((val: any, ci: any) => (
                         <td key={ci} className="p-0.5">
                           <div className={`w-full py-2 rounded text-center text-[11px] font-bold ${cellColor(val)}`}>
                             {val}%

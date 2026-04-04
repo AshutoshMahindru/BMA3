@@ -118,7 +118,7 @@ export default function ScenarioComparisonConsole() {
                         {row.item}
                       </td>
                       {[row.base, row.bull, row.bear, row.stress].map((scenarioData, sIdx) =>
-                        scenarioData.map((val, yIdx) => {
+                        scenarioData.map((val: any, yIdx: number) => {
                           const isNeg = typeof val === 'number' && val < 0;
                           return (
                             <td key={`${sIdx}-${yIdx}`} className={`px-3 py-2.5 text-right font-mono border-r border-gray-50 last:border-r-0 ${

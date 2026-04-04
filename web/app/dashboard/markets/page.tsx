@@ -95,7 +95,7 @@ export default function MarketRolloutPlanner() {
                 </tr>
               </thead>
               <tbody>
-                {ganttData.map((g, i) => (
+                {ganttData.map((g: any, i: number) => (
                   <tr key={i} className="border-t border-gray-50">
                     <td className="py-2 font-semibold text-gray-700 pr-3">{g.kitchen}</td>
                     {quarters.map((_, qIdx) => (
