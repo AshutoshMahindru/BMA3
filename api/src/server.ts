@@ -12,6 +12,7 @@ import financialsRouter from './routes/v1/financials';
 import computeRouter from './routes/v1/compute';
 import analysisRouter from './routes/v1/analysis';
 import scopeRouter from './routes/v1/scope';
+import referenceRouter from './routes/v1/reference';
 import decisionsRouter from './routes/v1/decisions';
 import confidenceRouter from './routes/v1/confidence';
 import governanceRouter from './routes/v1/governance';
@@ -39,6 +40,7 @@ export function createApp() {
   app.use('/api/v1/compute', computeRouter);
   app.use('/api/v1/analysis', analysisRouter);
   app.use('/api/v1/scope', scopeRouter);
+  app.use('/api/v1/reference', referenceRouter);
   app.use('/api/v1/decisions', decisionsRouter);
   app.use('/api/v1/confidence', confidenceRouter);
   app.use('/api/v1/governance', governanceRouter);

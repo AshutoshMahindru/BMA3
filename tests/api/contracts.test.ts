@@ -86,4 +86,50 @@ describe('API contracts', () => {
     ]);
     expect(payload.meta?.freshness?.source).toBe('database');
   });
+
+  it('serves canonical reference routes with authenticated company context', async () => {
+    mockedQuery
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            id: '10000000-0000-4000-8000-000000000111',
+            tenant_id: '10000000-0000-4000-8000-000000000001',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [
+          {
+            node_id: '20000000-0000-4000-8000-000000000111',
+            parent_node_id: null,
+            label: 'Dark Kitchen',
+            code: 'DK',
+            level: 0,
+          },
+        ],
+      });
+
+    const response = await fetch(
+      `${baseUrl}/api/v1/reference/formats?companyId=10000000-0000-4000-8000-000000000111&limit=1`,
+      {
+        headers: {
+          Authorization: 'Bearer dev-local-token',
+        },
+      },
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.data).toEqual([
+      {
+        nodeId: '20000000-0000-4000-8000-000000000111',
+        name: 'Dark Kitchen',
+        parentId: null,
+        level: 0,
+      },
+    ]);
+    expect(payload.meta?.companyId).toBe('10000000-0000-4000-8000-000000000111');
+  });
 });
