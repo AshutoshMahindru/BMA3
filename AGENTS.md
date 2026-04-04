@@ -1,5 +1,14 @@
 # AGENTS.md — BMA3 Food Business Modelling Engine
 
+## Before You Start Coding
+
+1. Read `WAVE_STATUS.md` — know which wave is active and what's already done
+2. Read this file — conventions and rules
+3. Read `CODEGEN.md` — which artifact generates which file
+4. Check the target file in WAVE_STATUS.md — confirm it's NOT_STARTED or IN_PROGRESS
+5. After completing work, update `WAVE_STATUS.md`: mark targets DONE, add session log entry
+6. Run `python3 scripts/spec-compliance.py` — report the result
+
 ## Architecture
 
 - **Stack:** Next.js 14 (App Router) + Express + PostgreSQL 15 + BullMQ + Redis
