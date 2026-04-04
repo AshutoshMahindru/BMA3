@@ -936,7 +936,7 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return scenario ? result([{ id: matchingSetId }]) : result();
   }
 
-  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {
+  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at') && sql.includes('FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {
     const companyFilter = String(params[0]);
     const scenarioFilter = String(params[1]);
     const versionFilter = params.length > 4 ? String(params[2]) : null;
@@ -952,11 +952,13 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
         trigger_type: run.trigger_type,
         created_at: run.created_at,
         completed_at: run.completed_at,
+        error_message: null,
+        metadata: run.metadata,
       }));
     return result(rows);
   }
 
-  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE id::text = $1')) {
+  if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at') && sql.includes('FROM compute_runs') && sql.includes('WHERE id::text = $1')) {
     const run = computeRuns.find((row) => row.id === String(params[0]));
     return run
       ? result([{
@@ -965,6 +967,8 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
           trigger_type: run.trigger_type,
           created_at: run.created_at,
           completed_at: run.completed_at,
+          error_message: null,
+          metadata: run.metadata,
         }])
       : result();
   }
