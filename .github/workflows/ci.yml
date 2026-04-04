@@ -46,6 +46,10 @@ jobs:
       - name: Install root test dependencies
         run: npm ci
 
+      - name: Install API runtime dependencies for imported server modules
+        working-directory: api
+        run: npm ci
+
       - name: Run Jest suite
         run: npm test -- --runInBand
 

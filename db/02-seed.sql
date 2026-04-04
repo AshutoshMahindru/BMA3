@@ -1,7 +1,7 @@
 INSERT INTO companies (
     id, tenant_id, name, base_currency, fiscal_year_start_month, country_code
 ) VALUES (
-    'aaaaaaaa-0000-0000-0000-000000000001',
+    'aaaaaaaa-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
     'PizzaCo Dark Kitchen Operations',
     'AED',
@@ -12,9 +12,9 @@ INSERT INTO companies (
 INSERT INTO planning_calendars (
     id, tenant_id, company_id, name, start_date, end_date
 ) VALUES (
-    'bbbbbbbb-0000-0000-0000-000000000001',
+    'bbbbbbbb-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
-    'aaaaaaaa-0000-0000-0000-000000000001',
+    'aaaaaaaa-0000-4000-8000-000000000001',
     'Fiscal Year 2025',
     '2025-01-01',
     '2025-12-31'
@@ -22,7 +22,7 @@ INSERT INTO planning_calendars (
 
 DO $$
 DECLARE
-    cal_id UUID := 'bbbbbbbb-0000-0000-0000-000000000001';
+    cal_id UUID := 'bbbbbbbb-0000-4000-8000-000000000001';
     t_id   UUID := '10000000-0000-4000-8000-000000000001';
     month_names TEXT[] := ARRAY[
         'Jan 2025','Feb 2025','Mar 2025','Apr 2025',
@@ -48,27 +48,27 @@ END $$;
 
 INSERT INTO scenarios (id, tenant_id, company_id, name, scenario_type, description)
 VALUES
-    ('cccccccc-0001-0000-0000-000000000001',
+    ('cccccccc-0001-4000-8000-000000000001',
      '10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Base Case 2025', 'base',
      'Realistic central case: avg growth, stable food costs, on-plan expansion'),
 
-    ('cccccccc-0002-0000-0000-000000000001',
+    ('cccccccc-0002-4000-8000-000000000001',
      '10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Bull Case 2025', 'bull_case',
      '20% volume upside, lower CAC, faster market ramp'),
 
-    ('cccccccc-0003-0000-0000-000000000001',
+    ('cccccccc-0003-4000-8000-000000000001',
      '10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Bear Case 2025', 'bear_case',
      'Slower ramp, food cost +15%, platform commission increase'),
 
-    ('cccccccc-0004-0000-0000-000000000001',
+    ('cccccccc-0004-4000-8000-000000000001',
      '10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Stress Test 2025', 'stress_test',
      'Commission spike to 35%, food cost +25%, delayed expansion by 2 months');
 
@@ -89,10 +89,10 @@ INSERT INTO plan_versions (
 )
 SELECT
     CASE s.id
-      WHEN 'cccccccc-0001-0000-0000-000000000001' THEN 'dddddddd-0001-4000-8000-000000000001'::UUID
-      WHEN 'cccccccc-0002-0000-0000-000000000001' THEN 'dddddddd-0002-4000-8000-000000000001'::UUID
-      WHEN 'cccccccc-0003-0000-0000-000000000001' THEN 'dddddddd-0003-4000-8000-000000000001'::UUID
-      WHEN 'cccccccc-0004-0000-0000-000000000001' THEN 'dddddddd-0004-4000-8000-000000000001'::UUID
+      WHEN 'cccccccc-0001-4000-8000-000000000001' THEN 'dddddddd-0001-4000-8000-000000000001'::UUID
+      WHEN 'cccccccc-0002-4000-8000-000000000001' THEN 'dddddddd-0002-4000-8000-000000000001'::UUID
+      WHEN 'cccccccc-0003-4000-8000-000000000001' THEN 'dddddddd-0003-4000-8000-000000000001'::UUID
+      WHEN 'cccccccc-0004-4000-8000-000000000001' THEN 'dddddddd-0004-4000-8000-000000000001'::UUID
       ELSE gen_random_uuid()
     END,
     s.tenant_id,
@@ -111,7 +111,7 @@ WHERE s.tenant_id = '10000000-0000-4000-8000-000000000001';
 INSERT INTO countries (tenant_id, company_id, name, iso_code, currency_code)
 VALUES (
     '10000000-0000-4000-8000-000000000001',
-    'aaaaaaaa-0000-0000-0000-000000000001',
+    'aaaaaaaa-0000-4000-8000-000000000001',
     'United Arab Emirates', 'AE', 'AED'
 );
 
@@ -133,30 +133,30 @@ FROM macros WHERE name = 'Dubai City'
 INSERT INTO platforms (tenant_id, company_id, name, platform_type, base_commission_pct, payout_lag_days)
 VALUES
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Talabat', 'aggregator', 0.2800, 14),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Deliveroo', 'aggregator', 0.3000, 7),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Uber Eats', 'aggregator', 0.3000, 7),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001',
+     'aaaaaaaa-0000-4000-8000-000000000001',
      'Own App', 'own_app', 0.0, 1);
 
 INSERT INTO product_families (tenant_id, company_id, name, family_type, avg_prep_mins)
 VALUES
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001', 'Pizza', 'pizza', 18),
+     'aaaaaaaa-0000-4000-8000-000000000001', 'Pizza', 'pizza', 18),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001', 'Sides', 'sides', 8),
+     'aaaaaaaa-0000-4000-8000-000000000001', 'Sides', 'sides', 8),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001', 'Beverages', 'beverages', 2),
+     'aaaaaaaa-0000-4000-8000-000000000001', 'Beverages', 'beverages', 2),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001', 'Desserts', 'desserts', 6),
+     'aaaaaaaa-0000-4000-8000-000000000001', 'Desserts', 'desserts', 6),
     ('10000000-0000-4000-8000-000000000001',
-     'aaaaaaaa-0000-0000-0000-000000000001', 'Combos', 'combos', 20);
+     'aaaaaaaa-0000-4000-8000-000000000001', 'Combos', 'combos', 20);
 
 INSERT INTO kitchens (
     id, tenant_id, micro_id, name, format, launch_date, sqm, status, max_capacity_orders_day
@@ -182,7 +182,7 @@ WITH scenario_factors AS (
     SELECT *
     FROM (VALUES
         (
-            'cccccccc-0001-0000-0000-000000000001'::UUID,
+            'cccccccc-0001-4000-8000-000000000001'::UUID,
             1.00::DECIMAL(10,4), 1.00::DECIMAL(10,4), 0.2800::DECIMAL(10,4), 0.0350::DECIMAL(10,4),
             1.00::DECIMAL(10,4), 1.00::DECIMAL(10,4), 1.00::DECIMAL(10,4), 1.00::DECIMAL(10,4), 1.00::DECIMAL(10,4),
             900000::DECIMAL(19,4), 320000::DECIMAL(19,4), 0::DECIMAL(19,4), 280000::DECIMAL(19,4), 1850000::DECIMAL(19,4),
@@ -190,7 +190,7 @@ WITH scenario_factors AS (
             14000::DECIMAL(19,4), 9000::DECIMAL(19,4), -8000::DECIMAL(19,4), 5000::DECIMAL(19,4), -4500::DECIMAL(19,4)
         ),
         (
-            'cccccccc-0002-0000-0000-000000000001'::UUID,
+            'cccccccc-0002-4000-8000-000000000001'::UUID,
             1.18::DECIMAL(10,4), 1.04::DECIMAL(10,4), 0.2650::DECIMAL(10,4), 0.0250::DECIMAL(10,4),
             0.96::DECIMAL(10,4), 0.95::DECIMAL(10,4), 0.92::DECIMAL(10,4), 1.02::DECIMAL(10,4), 1.10::DECIMAL(10,4),
             980000::DECIMAL(19,4), 280000::DECIMAL(19,4), 0::DECIMAL(19,4), 260000::DECIMAL(19,4), 1900000::DECIMAL(19,4),
@@ -198,7 +198,7 @@ WITH scenario_factors AS (
             24000::DECIMAL(19,4), 16000::DECIMAL(19,4), -6000::DECIMAL(19,4), 9000::DECIMAL(19,4), -2500::DECIMAL(19,4)
         ),
         (
-            'cccccccc-0003-0000-0000-000000000001'::UUID,
+            'cccccccc-0003-4000-8000-000000000001'::UUID,
             0.87::DECIMAL(10,4), 0.99::DECIMAL(10,4), 0.3000::DECIMAL(10,4), 0.0500::DECIMAL(10,4),
             1.12::DECIMAL(10,4), 1.05::DECIMAL(10,4), 1.08::DECIMAL(10,4), 1.08::DECIMAL(10,4), 1.05::DECIMAL(10,4),
             760000::DECIMAL(19,4), 250000::DECIMAL(19,4), 200000::DECIMAL(19,4), 360000::DECIMAL(19,4), 1800000::DECIMAL(19,4),
@@ -206,7 +206,7 @@ WITH scenario_factors AS (
             -9000::DECIMAL(19,4), 2000::DECIMAL(19,4), -18000::DECIMAL(19,4), -7000::DECIMAL(19,4), -11000::DECIMAL(19,4)
         ),
         (
-            'cccccccc-0004-0000-0000-000000000001'::UUID,
+            'cccccccc-0004-4000-8000-000000000001'::UUID,
             0.76::DECIMAL(10,4), 0.97::DECIMAL(10,4), 0.3300::DECIMAL(10,4), 0.0600::DECIMAL(10,4),
             1.20::DECIMAL(10,4), 1.10::DECIMAL(10,4), 1.12::DECIMAL(10,4), 1.12::DECIMAL(10,4), 1.08::DECIMAL(10,4),
             650000::DECIMAL(19,4), 300000::DECIMAL(19,4), 350000::DECIMAL(19,4), 420000::DECIMAL(19,4), 1750000::DECIMAL(19,4),
@@ -231,7 +231,7 @@ periods AS (
         (pp.end_date - pp.start_date + 1) AS day_count
     FROM planning_periods pp
     JOIN planning_calendars pc ON pc.id = pp.calendar_id
-    WHERE pc.company_id = 'aaaaaaaa-0000-0000-0000-000000000001'::UUID
+    WHERE pc.company_id = 'aaaaaaaa-0000-4000-8000-000000000001'::UUID
       AND pc.is_deleted = FALSE
       AND pp.is_deleted = FALSE
 ),
@@ -511,7 +511,7 @@ SELECT
         SELECT pf.id
         FROM product_families pf
         WHERE pf.tenant_id = spb.tenant_id
-          AND pf.company_id = 'aaaaaaaa-0000-0000-0000-000000000001'::UUID
+          AND pf.company_id = 'aaaaaaaa-0000-4000-8000-000000000001'::UUID
           AND pf.name = 'Pizza'
         LIMIT 1
     ),
@@ -519,7 +519,7 @@ SELECT
         SELECT p.id
         FROM platforms p
         WHERE p.tenant_id = spb.tenant_id
-          AND p.company_id = 'aaaaaaaa-0000-0000-0000-000000000001'::UUID
+          AND p.company_id = 'aaaaaaaa-0000-4000-8000-000000000001'::UUID
           AND p.name = 'Talabat'
         LIMIT 1
     ),
