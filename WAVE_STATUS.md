@@ -13,7 +13,7 @@
 - **PARTIAL**: only part of the target surface is live
 - **NOT_STARTED**: no meaningful merged work yet
 
-## Current Wave: 5 (Harden) — PARTIAL
+## Current Wave: 5 (Harden) — DONE
 
 ## Baseline Snapshot
 
@@ -26,8 +26,8 @@ original Wave 1-only state:
 - `risk` and `simulations` are also rewired to canonical routes
 - Local runtime is PostgreSQL-only by default with `npm run smoke:canonical`
 - No active legacy frontend boundary remains on the dashboard surfaces; Wave 5
-  hardening is now focused on runtime infrastructure verification and the last
-  post-wave parity surfaces
+  hardening is now closed, and the remaining repo work is post-wave parity
+  cleanup plus assumptions-surface behavior completion
 
 ## Wave Status
 
@@ -37,7 +37,7 @@ original Wave 1-only state:
 | 2. First Slice | **DONE** | Low | Golden fixture passes, P&L page shows live data | 48/48 golden tests pass, P&L wired to live API |
 | 3. Compute | **DONE** | Low | Full 18-step DAG runs, both fixtures pass, balance sheet identity holds | 114/114 tests pass, all 14 nodes validated, DAG acceptance met |
 | 4. Rewire | **DONE** | Low | All pages live, no static fallback, no string IDs | All primary API routes live (11 routers, including `reference` and `ai`), all dashboard pages wired to canonical API, legacy files deleted |
-| 5. Harden | **PARTIAL** | Low | Full CI green, compliance blocking, `docker-compose up` runs full stack | Auth/tenant middleware, structured logging, contract tests, migration tooling, Playwright E2E, and blocking compliance are live; docker-compose now defines Postgres + Redis + API + worker + web, but local boot verification is still pending because Docker was unavailable in this session |
+| 5. Harden | **DONE** | Low | Full CI green, compliance blocking, `docker-compose up` runs full stack | Auth/tenant middleware, structured logging, contract tests, migration tooling, Playwright E2E, and blocking compliance are live. Local `docker compose up -d` now boots Postgres + Redis + API + worker + web, and a compose-hosted queued compute run completes all 18 steps. |
 
 ## Verification Strategy
 
@@ -47,7 +47,7 @@ original Wave 1-only state:
 | 2. First Slice | Golden fixture test: input -> compute -> output matches `test_fixtures.json`. Use blind-deposit verification for compute nodes. |
 | 3. Compute | Extended golden fixture (both test cases, 114 tests). Balance sheet identity: A - amort - tax = L + E (documented structural gaps). Cash flow reconciliation: OCF+ICF+FCF=net_change. All 14 node formulas match variable_registry.json and computation_graph.json. Hand-verified cash flow/BS values. |
 | 4. Rewire | Page-level verification: all 11 implemented API routers registered (`context`, `assumptions`, `financials`, `compute`, `analysis`, `scope`, `reference`, `decisions`, `confidence`, `governance`, `ai`). All dashboard pages import from `api-client.ts`. Routed Scenario Comparison, Scope Review, Scope Dimension Editors, Scenario Wizard, and Compute Center surfaces are live. Canonical dashboard aliases for `cash-flow`, `capital-strategy`, and `simulation` resolve via Next rewrites. Legacy files deleted (`web/lib/api.ts`, `web/lib/use-api-data.ts`, `web/lib/data/markets.ts`). Duplicate `simulation/` folder removed. `DataFreshness` shows live on all surfaces. `tsc --noEmit` clean, Jest green, compliance COMPLIANT. |
-| 5. Harden | Full CI pipeline green, canonical smoke green, compliance checker blocking with 0 errors / 0 warnings, Playwright E2E green, and the compose stack is defined for Postgres + Redis + API + worker + web. Local `docker compose up` verification is blocked until Docker is available. |
+| 5. Harden | Full CI pipeline green, canonical smoke green, compliance checker blocking with 0 errors / 0 warnings, Playwright E2E green, and the compose stack is verified end to end for Postgres + Redis + API + worker + web. Async queue handoff and a full 18-step compute run are proven on the compose-hosted stack. |
 
 ## File Generation Tracker
 
@@ -69,7 +69,7 @@ original Wave 1-only state:
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/routes/v1/context.ts` | **DONE** | `api_contracts.json` context |
-| `api/src/routes/v1/assumptions.ts` | **DONE** | `api_contracts.json` assumptions |
+| `api/src/routes/v1/assumptions.ts` | **DONE** | `api_contracts.json` assumptions (route surface complete; packs/apply/override behavior still partially stubbed) |
 | `api/src/routes/v1/financials.ts` | **DONE** | `api_contracts.json` financials |
 | `api/src/compute/orchestrator.ts` | **DONE** | `computation_graph.json` — 18-step sequencer |
 | `api/src/compute/nodes/planning-spine.ts` | **DONE** | node 1 — DDL-aligned (plan_versions) |
@@ -110,7 +110,7 @@ original Wave 1-only state:
 | Core finance screens rewired | **DONE** | `traceability.json` |
 | `web/app/dashboard/risk/page.tsx` | **DONE** | canonical `analysis/risk` |
 | `web/app/dashboard/simulations/page.tsx` | **DONE** | canonical `analysis/simulation-runs` |
-| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions API (demand/cost/funding/wc read+write, compute trigger) |
+| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions API live for the currently wired subset; pack/apply + override flows still depend on partially stubbed backend surfaces |
 | `web/app/dashboard/markets/page.tsx` | **DONE** | canonical `decisions/markets` API |
 | `web/app/dashboard/analysis/compare/page.tsx` | **DONE** | canonical Scenario Comparison Console route |
 | `web/app/dashboard/scope/page.tsx` | **DONE** | canonical scope route index |
@@ -134,10 +134,10 @@ original Wave 1-only state:
 | `api/src/middleware/tenant.ts` | **DONE** | JWT claims + company/tenant ownership enforcement |
 | Structured logging (pino) | **DONE** | `console.*` removed from production API runtime / compute code |
 | Canonical smoke script + CI job | **DONE** | execution baseline |
-| Complete docker-compose | **PARTIAL** | Postgres + Redis + API + worker + web defined; `docker compose config` passes, but local boot verification is blocked until Docker is available |
+| Complete docker-compose | **DONE** | Postgres + Redis + API + worker + web boot locally via `docker compose up -d`; container-native `node_modules` volumes prevent host-binary drift, and compose-hosted queued compute completes successfully |
 | `db/migrations/` tooling | **DONE** | `node-pg-migrate` scripts + baseline migration scaffold |
 | `tests/api/contracts.test.ts` | **DONE** | app boot + auth/envelope smoke against canonical routes |
-| `tests/e2e/dashboard.test.ts` | **DONE** | Playwright full-stack route smoke with fixture API |
+| `tests/e2e/dashboard.test.ts` | **DONE** | Playwright full-stack route smoke with fixture API (`7/7` local) |
 | Flip compliance to blocking CI | **DONE** | spec compliance now fails CI on error/warn regressions |
 
 ## DDL Alignment Fix Log (Wave 3)
@@ -176,9 +176,13 @@ All Wave 4 blocking legacy files have been resolved:
 Wave 5 also removed the remaining stub data files under `web/lib/data/`, so the
 dashboard surfaces no longer depend on static `.ts` data shims.
 
+One remaining product caveat sits outside the Wave 5 gate: the assumptions
+router still exposes partially stubbed `/packs`, `/packs/:packId/apply`, and
+`/overrides` behavior, so route-count parity is ahead of behavior parity there.
+
 ## Compliance Snapshot
 
-Last verified after AI + infra + routed-page gap closure:
+Last verified after compose runtime closure:
 
 - `python3 scripts/spec-compliance.py`
 - Result: **COMPLIANT**
@@ -211,3 +215,4 @@ Last verified after AI + infra + routed-page gap closure:
 | 20 | 2026-04-05 | Analysis doc correction | Reconciled `specos-analysis.md` with the merged repo and current SpecOS artifacts: removed the stale claim that `/api/v1/assumptions` still lacked category routes, converted dashboard-path-backed frontend surfaces from “mismatches” into canonical remaps, reduced remaining dashboard slug drift to the unresolved `cashflow` / `capital` / `simulations` aliases, and softened compute coverage wording to match the current 34-binding orchestrator harness rather than claiming one-assert-per-variable coverage for all 73 registry variables. Re-verified build status in `api/` and `web/` and reran `python3 scripts/spec-compliance.py`. | compliant, 0 failures |
 | 21 | 2026-04-05 | AI + infra + routed-page gap closure | Implemented the missing SpecOS `/api/v1/ai` router (`edit-suggestions`, `analyze`, `explain`, `research-draft`) and registered it in `server.ts`; added BullMQ + Redis queue infrastructure, a compute worker runtime, `node-pg-migrate` tooling, and an expanded `docker-compose.yml` that defines Postgres + Redis + API + worker + web. Added routed frontend surfaces for the Scenario Comparison Console, scope dimension editor family, and Scenario Wizard, plus Playwright E2E coverage over those live flows. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand` (`119/119`), `npm run test:e2e` (`3/3`), `docker compose config`, and `python3 scripts/spec-compliance.py`. Local `docker compose up` remains unverified because the Docker daemon was unavailable in this session. | compliant, 0 failures |
 | 22 | 2026-04-05 | Post-Wave frontend parity closure | Implemented the missing routed Scope Review and Compute Center surfaces, switched the scope validation endpoint back to the SpecOS contract shape (`scopeBundleId` only), added canonical Next route aliases for `/dashboard/cash-flow`, `/dashboard/capital-strategy`, and `/dashboard/simulation`, and expanded Playwright dashboard coverage from `3/3` to `5/5`. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand`, `npm run test:e2e`, and `python3 scripts/spec-compliance.py`. Docker runtime verification remains the only open Wave 5 gate. | compliant, 0 failures |
+| 23 | 2026-04-05 | Wave 5 runtime closure | Fixed live async compute blockers across assumption-pack resolution, projection persistence, and confidence rollups; added bootstrap migration `005` for canonical assumption packs/bindings; verified `npm run migrate:up`; proved host-run and compose-hosted queued compute both complete all 18 steps; and fixed `docker-compose.yml` to use container-native `node_modules` volumes so Linux containers no longer crash on macOS host binaries. Also re-verified the already-landed AI SME overlays (executive + P&L), bringing Playwright dashboard coverage to `7/7` locally. Wave 5 gate is now closed; remaining follow-up work is assumptions API behavior completion and financial reconciliation cleanup. | compliant, 0 failures |

@@ -20,9 +20,10 @@ export async function executePlanningSpine(
 ): Promise<void> {
   // ── Step 1: Resolve company context and tenant boundary ─────────────────
   const companyResult = await db.query(
-    `SELECT id, name, status, default_currency, fiscal_year_start_month
+    `SELECT id, name, base_currency, fiscal_year_start_month
      FROM companies
-     WHERE id = $1`,
+     WHERE id = $1
+       AND is_deleted = FALSE`,
     [ctx.company_id]
   );
 
@@ -31,17 +32,14 @@ export async function executePlanningSpine(
   }
 
   const company = companyResult.rows[0];
-  if (company.status !== 'active') {
-    throw new Error(
-      `Company ${ctx.company_id} has status '${company.status}' — must be 'active' for compute`
-    );
-  }
 
   // ── Step 2: Resolve scenario context ────────────────────────────────────
   const scenarioResult = await db.query(
-    `SELECT id, name, scenario_family, status, company_id
+    `SELECT id, name, scenario_type AS scenario_family, company_id
      FROM scenarios
-     WHERE id = $1 AND company_id = $2`,
+     WHERE id = $1
+       AND company_id = $2
+       AND is_deleted = FALSE`,
     [ctx.scenario_id, ctx.company_id]
   );
 
@@ -53,7 +51,7 @@ export async function executePlanningSpine(
 
   const scenario = scenarioResult.rows[0];
   // scenario_family must be one of: base, bull, bear, stress, strategic-option
-  const validFamilies = ['base', 'bull', 'bear', 'stress', 'strategic-option'];
+  const validFamilies = ['base', 'bull_case', 'bear_case', 'stress_test', 'custom'];
   if (scenario.scenario_family && !validFamilies.includes(scenario.scenario_family)) {
     throw new Error(
       `Scenario ${ctx.scenario_id} has invalid family '${scenario.scenario_family}'. ` +
@@ -63,16 +61,21 @@ export async function executePlanningSpine(
 
   // ── Step 3: Resolve version state ───────────────────────────────────────
   const versionResult = await db.query(
-    `SELECT id, status, version_label
+    `SELECT id, status, name AS version_label, is_frozen
      FROM plan_versions
-     WHERE id = $1 AND scenario_id = $2`,
+     WHERE id = $1
+       AND scenario_id = $2
+       AND is_deleted = FALSE`,
     [ctx.version_id, ctx.scenario_id]
   );
 
   if (versionResult.rows.length === 0) {
     // Try without scenario constraint — version may exist but not be linked
     const versionExistsResult = await db.query(
-      `SELECT id, status FROM plan_versions WHERE id = $1`,
+      `SELECT id, status, is_frozen
+         FROM plan_versions
+        WHERE id = $1
+          AND is_deleted = FALSE`,
       [ctx.version_id]
     );
 
@@ -88,10 +91,9 @@ export async function executePlanningSpine(
   }
 
   // Validate version state allows compute
-  // Valid compute states: working_draft, submitted, approved (not published/frozen)
-  const version = versionResult.rows[0] ?? { status: 'working_draft', version_label: null };
-  const computeBlockedStates = ['frozen', 'rejected'];
-  if (computeBlockedStates.includes(version.status)) {
+  const version = versionResult.rows[0] ?? { status: 'draft', version_label: null, is_frozen: false };
+  const computeBlockedStates = ['published', 'archived', 'superseded'];
+  if (version.is_frozen || computeBlockedStates.includes(version.status)) {
     throw new Error(
       `Version ${ctx.version_id} has state '${version.status}' which conflicts with governance rules — cannot compute`
     );
@@ -99,11 +101,18 @@ export async function executePlanningSpine(
 
   // ── Step 4: Resolve planning horizon and period range ───────────────────
   const periodsResult = await db.query(
-    `SELECT id AS period_id, label, start_date, end_date
-     FROM planning_periods
-     WHERE company_id = $1
-       AND start_date >= $2
-       AND end_date <= $3
+    `SELECT pp.id AS period_id,
+            pp.name AS label,
+            pp.start_date,
+            pp.end_date
+       FROM planning_periods pp
+       JOIN planning_calendars pc
+         ON pc.id = pp.calendar_id
+      WHERE pc.company_id = $1
+        AND pc.is_deleted = FALSE
+        AND pp.is_deleted = FALSE
+        AND pp.start_date >= $2
+        AND pp.end_date <= $3
      ORDER BY start_date ASC`,
     [ctx.company_id, ctx.period_range.start, ctx.period_range.end]
   );

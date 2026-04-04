@@ -33,6 +33,29 @@ test('loads the compute center', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Run Compute' })).toBeVisible();
 });
 
+test('opens the executive AI strategy SME overlay', async ({ page }) => {
+  await page.goto('/dashboard/executive');
+
+  await expect(page.getByRole('heading', { name: 'Executive Planning Cockpit' })).toBeVisible();
+  await page.getByRole('button', { name: 'AI Strategy SME' }).click();
+
+  await expect(page.getByRole('dialog', { name: 'Executive AI Strategy SME' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Leadership signals' })).toBeVisible();
+  await expect(page.getByText('Average weighted score is')).toBeVisible();
+});
+
+test('opens the pnl AI driver SME overlay', async ({ page }) => {
+  await page.goto('/dashboard/pnl');
+
+  await expect(page.getByRole('heading', { name: 'P&L Projection Console' })).toBeVisible();
+  await page.getByRole('button', { name: 'AI Driver SME' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'P&L AI Driver SME' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Top drivers' })).toBeVisible();
+  await expect(dialog.getByText('Average Order Value', { exact: true })).toBeVisible();
+});
+
 test('creates a scenario through the scenario wizard start flow', async ({ page }) => {
   await page.goto('/wizard/scenario/start');
 

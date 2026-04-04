@@ -284,6 +284,35 @@ const sensitivityRows = [
   { variable_name: 'food_cost_pct', base_value: 0.31, delta_pct: 3, impact_value: -64000 },
 ];
 
+const driverExplainabilityRows = [
+  { id: '76000000-0000-4000-8000-000000000111', company_id: companyId, scenario_id: scenarios[0].id, target_metric: 'EBITDA', driver_name: 'Average Order Value', contribution_value: 124000, contribution_pct: 38.5, impact_amount: 124000, created_at: '2026-04-03T10:00:00.000Z' },
+  { id: '76000000-0000-4000-8000-000000000112', company_id: companyId, scenario_id: scenarios[0].id, target_metric: 'EBITDA', driver_name: 'Conversion Rate', contribution_value: 91000, contribution_pct: 24.2, impact_amount: 91000, created_at: '2026-04-03T10:01:00.000Z' },
+  { id: '76000000-0000-4000-8000-000000000113', company_id: companyId, scenario_id: scenarios[0].id, target_metric: 'EBITDA', driver_name: 'Food Cost %', contribution_value: -67000, contribution_pct: -18.1, impact_amount: -67000, created_at: '2026-04-03T10:02:00.000Z' },
+  { id: '76000000-0000-4000-8000-000000000114', company_id: companyId, scenario_id: scenarios[0].id, target_metric: 'Net Revenue', driver_name: 'Order Volume', contribution_value: 156000, contribution_pct: 44.8, impact_amount: 156000, created_at: '2026-04-03T10:03:00.000Z' },
+];
+
+const confidenceRollups = [
+  { company_id: companyId, rollup_scope: 'scenario', avg_score: 78, assessment_count: 6, critical_floor: 62 },
+  { company_id: companyId, rollup_scope: 'portfolio', avg_score: 71, assessment_count: 4, critical_floor: 58 },
+  { company_id: companyId, rollup_scope: 'operating_model', avg_score: 83, assessment_count: 3, critical_floor: 69 },
+];
+
+const assumptionBindingRows = [
+  { id: '77000000-0000-4000-8000-000000000111', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'avg_order_value', current_value: 64, unit: 'AED', evidence_ref: 'market_research', family: 'demand', pack_name: 'Demand Core' },
+  { id: '77000000-0000-4000-8000-000000000112', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'conversion_rate', current_value: 0.24, unit: 'ratio', evidence_ref: 'historical_data', family: 'demand', pack_name: 'Demand Core' },
+  { id: '77000000-0000-4000-8000-000000000113', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'food_cost_pct', current_value: 0.31, unit: 'ratio', evidence_ref: 'industry_benchmark', family: 'cost', pack_name: 'Cost Guardrails' },
+];
+
+const researchTasks = [
+  { company_id: companyId, entity_type: 'scenario', entity_id: scenarios[0].id, title: 'Validate competitor pricing signal', status: 'open', description: 'Review marketplace discounting trends.' },
+  { company_id: companyId, entity_type: 'scenario', entity_id: scenarios[0].id, title: 'Refresh UAE demand benchmark', status: 'open', description: 'Confirm quarter-on-quarter delivery frequency.' },
+];
+
+const evidenceItems = [
+  { company_id: companyId, entity_type: 'scenario', entity_id: scenarios[0].id, title: 'Talabat Q1 marketplace trend', source_url: 'https://example.com/talabat-q1', source_type: 'market_report', source_name: 'Talabat benchmark', metadata: { description: 'Marketplace take-rate trend and promo pressure.' } },
+  { company_id: companyId, entity_type: 'scenario', entity_id: scenarios[0].id, title: 'Internal basket-size study', source_url: 'https://example.com/basket-study', source_type: 'internal_research', source_name: 'Ops analytics', metadata: { description: 'Basket-size uplift from combo merchandising.' } },
+];
+
 const scopeRows = {
   formats: [
     { id: '60000000-0000-4000-8000-000000000111', name: 'Dark Kitchen', parent_id: null, level_depth: 0 },
@@ -343,6 +372,10 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return params[0] === company.id ? result([{ id: company.id, tenant_id: company.tenant_id }]) : result();
   }
 
+  if (sql.includes('SELECT id FROM companies WHERE id::text = $1 AND tenant_id::text = $2 AND is_deleted = FALSE')) {
+    return params[0] === company.id && params[1] === company.tenant_id ? result([{ id: company.id }]) : result();
+  }
+
   if (sql.includes('FROM scenarios s') && sql.includes('LEFT JOIN LATERAL')) {
     const companyFilter = String(params[0]);
     const rows = scenarios
@@ -392,6 +425,30 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     );
   }
 
+  if (sql.includes('SELECT s.id, s.company_id FROM scenarios s') && sql.includes('c.tenant_id::text = $2')) {
+    const scenario = scenarios.find((row) => row.id === String(params[0]) && row.tenant_id === String(params[1]));
+    return scenario ? result([{ id: scenario.id, company_id: scenario.company_id }]) : result();
+  }
+
+  if (sql.includes('SELECT s.company_id FROM scenarios s') && sql.includes('c.tenant_id::text = $2')) {
+    const scenario = scenarios.find((row) => row.id === String(params[0]) && row.tenant_id === String(params[1]));
+    return scenario ? result([{ company_id: scenario.company_id }]) : result();
+  }
+
+  if (sql.includes('SELECT pv.id, pv.company_id, pv.scenario_id, pv.assumption_set_id, pv.status, pv.is_frozen') && sql.includes('c.tenant_id::text = $2')) {
+    const version = versions.find((row) => row.id === String(params[0]) && row.tenant_id === String(params[1]));
+    return version
+      ? result([{
+          id: version.id,
+          company_id: version.company_id,
+          scenario_id: version.scenario_id,
+          assumption_set_id: version.assumption_set_id,
+          status: version.status,
+          is_frozen: version.is_frozen,
+        }])
+      : result();
+  }
+
   if (sql.includes('SELECT COALESCE(SUM(net_revenue), 0)::float8 AS value FROM pnl_projections')) {
     return result([{ value: metricStore[String(params[0])]?.revenue || 0 }]);
   }
@@ -408,6 +465,14 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return result(sensitivityRows);
   }
 
+  if (sql.includes('SELECT COALESCE(SUM(t.net_revenue), 0) AS revenue') && sql.includes('FROM pnl_projections t')) {
+    return result([{ revenue: 1200000, gross_profit: 540000, ebitda: 180000, net_income: 96000 }]);
+  }
+
+  if (sql.includes('SELECT COALESCE(AVG(GREATEST(-t.net_change, 0)), 0) AS burn') && sql.includes('FROM cashflow_projections t')) {
+    return result([{ burn: 125000, runway: 14.5 }]);
+  }
+
   if (sql.includes('SELECT pv.id, pv.company_id, pv.scenario_id, pv.assumption_set_id, pv.status, pv.is_frozen') && sql.includes('FROM plan_versions pv')) {
     const version = versions.find(
       (row) => row.id === String(params[0]) && row.company_id === String(params[1]) && row.scenario_id === String(params[2]),
@@ -422,6 +487,22 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
           is_frozen: version.is_frozen,
         }])
       : result();
+  }
+
+  if (sql.includes('FROM planning_periods pp') && sql.includes('LEFT JOIN pnl_projections t') && sql.includes('COALESCE(SUM(t.gross_revenue), 0) AS gross_revenue')) {
+    return result([
+      { period_id: periods[0].id, label: periods[0].name, sequence_order: 1, gross_revenue: 420000, platform_commission: 88000, net_revenue: 332000, cogs_total: 138000, gross_profit: 194000, labor_cost: 54000, marketing_cost: 28000, opex_total: 46000, ebitda: 66000, depreciation: 9000, interest_expense: 5000, net_income: 42000 },
+      { period_id: periods[1].id, label: periods[1].name, sequence_order: 2, gross_revenue: 460000, platform_commission: 96000, net_revenue: 364000, cogs_total: 151000, gross_profit: 213000, labor_cost: 58000, marketing_cost: 31000, opex_total: 49000, ebitda: 75000, depreciation: 9000, interest_expense: 5000, net_income: 50000 },
+      { period_id: periods[2].id, label: periods[2].name, sequence_order: 3, gross_revenue: 500000, platform_commission: 104000, net_revenue: 396000, cogs_total: 163000, gross_profit: 233000, labor_cost: 62000, marketing_cost: 34000, opex_total: 52000, ebitda: 84000, depreciation: 9000, interest_expense: 6000, net_income: 57000 },
+    ]);
+  }
+
+  if (sql.includes('SELECT driver_name, COALESCE(SUM(impact_amount), 0) AS impact') && sql.includes('FROM driver_explainability')) {
+    const scenarioId = String(params[0]);
+    const rows = driverExplainabilityRows
+      .filter((row) => row.scenario_id === scenarioId)
+      .map((row) => ({ driver_name: row.driver_name, impact: row.impact_amount }));
+    return result(rows);
   }
 
   if (sql.includes('FROM format_taxonomy_nodes t')) {
@@ -489,6 +570,24 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
 
   if (sql.includes('FROM scope_bundle_items sbi') && sql.includes('GROUP BY sbi.dimension_family')) {
     return result([{ dimension_family: 'formats', cnt: 2 }, { dimension_family: 'geography', cnt: 1 }]);
+  }
+
+  if (sql.includes('FROM assumption_field_bindings afb') && sql.includes('JOIN assumption_packs ap')) {
+    const companyFilter = String(params[0]);
+    const assumptionSetId = params[1] ? String(params[1]) : null;
+    const rows = assumptionBindingRows
+      .filter((row) => row.company_id === companyFilter)
+      .filter((row) => !assumptionSetId || row.assumption_set_id === assumptionSetId)
+      .map((row) => ({
+        id: row.id,
+        variable_name: row.variable_name,
+        current_value: row.current_value,
+        unit: row.unit,
+        evidence_ref: row.evidence_ref,
+        family: row.family,
+        pack_name: row.pack_name,
+      }));
+    return result(rows);
   }
 
   if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {
@@ -562,6 +661,88 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
         return rightDate.localeCompare(leftDate);
       })[0];
     return run ? result([{ id: run.id, status: run.status, completed_at: run.completed_at, metadata: run.metadata }]) : result();
+  }
+
+  if (sql.includes('SELECT rollup_scope, COALESCE(AVG(weighted_score), 0)::float8 AS avg_score')) {
+    const companyFilter = String(params[0]);
+    return result(
+      confidenceRollups
+        .filter((row) => row.company_id === companyFilter)
+        .map((row) => ({
+          rollup_scope: row.rollup_scope,
+          avg_score: row.avg_score,
+          assessment_count: row.assessment_count,
+          critical_floor: row.critical_floor,
+        })),
+    );
+  }
+
+  if (sql.includes('SELECT de.driver_name, COALESCE(de.contribution_value, de.impact_amount, 0)::float8 AS contribution_value') && sql.includes('FROM driver_explainability de')) {
+    const companyFilter = String(params[0]);
+    const maybeScenarioId = params.length > 2 ? String(params[1]) : null;
+    const targetMetric = String(params[params.length - 1]).toLowerCase();
+    const rows = driverExplainabilityRows
+      .filter((row) => row.company_id === companyFilter)
+      .filter((row) => !maybeScenarioId || row.scenario_id === maybeScenarioId)
+      .filter((row) => row.target_metric.toLowerCase() === targetMetric)
+      .map((row) => ({
+        driver_name: row.driver_name,
+        contribution_value: row.contribution_value,
+      }));
+    return result(rows);
+  }
+
+  if (sql.includes('SELECT de.id, de.driver_name, COALESCE(de.contribution_value, de.impact_amount, 0)::float8 AS contribution_value') && sql.includes('FROM driver_explainability de')) {
+    const companyFilter = String(params[0]);
+    const scenarioFilter = String(params[1]);
+    const targetMetric = String(params[2]).toLowerCase();
+    const rows = driverExplainabilityRows
+      .filter((row) => row.company_id === companyFilter && row.scenario_id === scenarioFilter)
+      .filter((row) => row.target_metric.toLowerCase() === targetMetric)
+      .map((row) => ({
+        id: row.id,
+        driver_name: row.driver_name,
+        contribution_value: row.contribution_value,
+        contribution_pct: row.contribution_pct,
+      }));
+    return result(rows);
+  }
+
+  if (sql.includes('SELECT COUNT(*)::int AS open_count') && sql.includes('FROM research_tasks')) {
+    const companyFilter = String(params[0]);
+    return result([{ open_count: researchTasks.filter((task) => task.company_id === companyFilter && task.status === 'open').length }]);
+  }
+
+  if (sql.includes('SELECT ei.title, ei.source_url, ei.source_type, ei.source_name, ei.metadata') && sql.includes('FROM evidence_items ei')) {
+    const companyFilter = String(params[0]);
+    const entityType = String(params[1]);
+    const entityId = String(params[2]);
+    return result(
+      evidenceItems
+        .filter((row) => row.company_id === companyFilter && row.entity_type === entityType && row.entity_id === entityId)
+        .map((row) => ({
+          title: row.title,
+          source_url: row.source_url,
+          source_type: row.source_type,
+          source_name: row.source_name,
+          metadata: row.metadata,
+        })),
+    );
+  }
+
+  if (sql.includes('SELECT title, status, description FROM research_tasks') && sql.includes('entity_type = $2')) {
+    const companyFilter = String(params[0]);
+    const entityType = String(params[1]);
+    const entityId = String(params[2]);
+    return result(
+      researchTasks
+        .filter((row) => row.company_id === companyFilter && row.entity_type === entityType && row.entity_id === entityId)
+        .map((row) => ({
+          title: row.title,
+          status: row.status,
+          description: row.description,
+        })),
+    );
   }
 
   if (sql.includes('SELECT COUNT(*)::int AS count FROM pnl_projections WHERE scenario_id::text = $1')) {

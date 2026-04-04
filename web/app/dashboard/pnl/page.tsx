@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { getFinancialsPnl } from '@/lib/api-client';
+import { createAiEditSuggestions, createAiExplain, getFinancialsPnl } from '@/lib/api-client';
 
 /* ══════════════════════════════════════════════════════════════════════════
    S11: P&L PROJECTION CONSOLE — Full Spec Build
@@ -10,9 +10,10 @@ import { getFinancialsPnl } from '@/lib/api-client';
    EBITDA Bridge waterfall (6 drivers)
    ══════════════════════════════════════════════════════════════════════ */
 
-import { DollarSign, TrendingUp, TrendingDown, BarChart3, Download, Printer } from 'lucide-react';
+import { DollarSign, BarChart3, Download, Printer, RefreshCcw, Sparkles } from 'lucide-react';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
+import AiSmeOverlay from '@/components/ai-sme-overlay';
 
 // ── Types for P&L data returned by the API ────────────────────────────────
 
@@ -39,8 +40,24 @@ interface PnlApiResponse {
   ebitdaBridge?: EbitdaBridgeItem[];
 }
 
+interface AiDriver {
+  name: string;
+  contribution: number;
+  description: string;
+}
+
+interface AiSuggestion {
+  fieldId: string;
+  currentValue: number;
+  suggestedValue: number;
+  rationale: string;
+  confidence: string;
+}
+
 export default function PnlConsole() {
   const ctx = usePlanningContext();
+  const activeScenario = ctx.scenarios.find((scenario) => scenario.scenarioId === ctx.scenarioId);
+  const activeVersionId = activeScenario?.latestVersionId;
 
   const [pnlData, setPnlData] = useState<PnLRow[]>([]);
   const [months, setMonths] = useState<string[]>([]);
@@ -48,6 +65,15 @@ export default function PnlConsole() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiExplanation, setAiExplanation] = useState('');
+  const [aiDrivers, setAiDrivers] = useState<AiDriver[]>([]);
+  const [aiCaveats, setAiCaveats] = useState<string[]>([]);
+  const [aiSuggestions, setAiSuggestions] = useState<AiSuggestion[]>([]);
+  const [aiDisclaimer, setAiDisclaimer] = useState('');
+  const [aiReloadKey, setAiReloadKey] = useState(0);
 
   useEffect(() => {
     if (!ctx.companyId || !ctx.scenarioId) return;
@@ -74,6 +100,61 @@ export default function PnlConsole() {
       })
       .finally(() => setLoading(false));
   }, [ctx.companyId, ctx.scenarioId, ctx.periodStart]);
+
+  useEffect(() => {
+    if (!aiOpen || !ctx.companyId || !ctx.scenarioId) return;
+
+    const companyId = ctx.companyId;
+    const scenarioId = ctx.scenarioId;
+    let ignore = false;
+
+    const loadAiOverlay = async () => {
+      setAiLoading(true);
+      setAiError(null);
+
+      try {
+        const [explainResult, suggestionResult] = await Promise.all([
+          createAiExplain({
+            metricId: 'EBITDA',
+            scenarioId,
+            versionId: activeVersionId,
+            ...(ctx.periodStart ? { periodRange: { planningPeriodId: ctx.periodStart } } : {}),
+          }),
+          createAiEditSuggestions({
+            context: {
+              companyId,
+              scenarioId,
+              versionId: activeVersionId,
+              surface: 'pnl_console',
+            },
+            prompt: 'Improve EBITDA margin while protecting net revenue and preserving working capital discipline.',
+          }),
+        ]);
+
+        if (ignore) return;
+
+        setAiExplanation(explainResult.data?.explanation || '');
+        setAiDrivers((explainResult.data?.drivers || []) as AiDriver[]);
+        setAiCaveats((explainResult.data?.caveats || []) as string[]);
+        setAiSuggestions((suggestionResult.data?.suggestions || []) as AiSuggestion[]);
+        setAiDisclaimer(suggestionResult.data?.disclaimer || '');
+      } catch (loadError) {
+        if (!ignore) {
+          setAiError(loadError instanceof Error ? loadError.message : 'Failed to load AI driver overlay');
+        }
+      } finally {
+        if (!ignore) {
+          setAiLoading(false);
+        }
+      }
+    };
+
+    loadAiOverlay();
+
+    return () => {
+      ignore = true;
+    };
+  }, [aiOpen, aiReloadKey, activeVersionId, ctx.companyId, ctx.periodStart, ctx.scenarioId]);
 
   const fmt = (val: number) =>
     new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
@@ -105,6 +186,14 @@ export default function PnlConsole() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              disabled={!ctx.companyId || !ctx.scenarioId}
+              className="flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[10px] font-bold text-teal-900 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Sparkles className="h-3.5 w-3.5" /> AI Driver SME
+            </button>
             <button
               onClick={() => {
                 const headers = ['Line Item', ...months, 'FY Total'];
@@ -273,6 +362,102 @@ export default function PnlConsole() {
           </div>
         )}
       </div>
+
+      <AiSmeOverlay
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="P&L AI Driver SME"
+        subtitle="Advisory explanation of EBITDA movement plus guarded suggestion prompts from the live planning context."
+        footer={(
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{aiDisclaimer || 'Advisory only. Validate any suggested change against the governed assumptions workspace before applying it.'}</p>
+            <button
+              type="button"
+              onClick={() => setAiReloadKey((value) => value + 1)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+          </div>
+        )}
+      >
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-800">EBITDA readout</p>
+            <p className="mt-2 text-sm leading-6 text-teal-950">{aiExplanation || 'Open the advisory panel to summarize the dominant EBITDA drivers for the active scenario.'}</p>
+          </div>
+
+          {aiLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-teal-600" />
+              <p className="mt-3 text-sm font-medium text-slate-500">Loading AI driver analysis…</p>
+            </div>
+          ) : null}
+
+          {!aiLoading && aiError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+              <p className="text-sm font-semibold text-rose-800">AI driver SME unavailable</p>
+              <p className="mt-1 text-xs text-rose-700">{aiError}</p>
+            </div>
+          ) : null}
+
+          {!aiLoading && !aiError ? (
+            <>
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Top drivers</h3>
+                <div className="mt-3 space-y-3">
+                  {aiDrivers.length > 0 ? aiDrivers.map((driver) => (
+                    <div key={`${driver.name}:${driver.contribution}`} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">{driver.name}</p>
+                        <span className="rounded-full bg-slate-900 px-2 py-1 text-[10px] font-semibold text-white">
+                          {driver.contribution.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">{driver.description}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-slate-500">No explainability drivers were returned for EBITDA.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Suggested assumption nudges</h3>
+                <div className="mt-3 space-y-3">
+                  {aiSuggestions.length > 0 ? aiSuggestions.map((suggestion) => (
+                    <div key={suggestion.fieldId} className="rounded-xl border border-slate-100 px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{suggestion.confidence} confidence</p>
+                        <p className="text-xs font-medium text-slate-600">
+                          {suggestion.currentValue.toFixed(2)} → <span className="font-semibold text-teal-700">{suggestion.suggestedValue.toFixed(2)}</span>
+                        </p>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">{suggestion.rationale}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-slate-500">No guarded suggestion prompts were returned.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Caveats</h3>
+                <ul className="mt-3 space-y-2">
+                  {aiCaveats.length > 0 ? aiCaveats.map((caveat) => (
+                    <li key={caveat} className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                      {caveat}
+                    </li>
+                  )) : (
+                    <li className="text-xs text-slate-500">No additional caveats were surfaced.</li>
+                  )}
+                </ul>
+              </section>
+            </>
+          ) : null}
+        </div>
+      </AiSmeOverlay>
     </div>
   );
 }

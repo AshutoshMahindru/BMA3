@@ -42,6 +42,13 @@ function paginate(query: Record<string, unknown>) {
   return { limit, offset };
 }
 
+function asCanonicalDate(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return null;
+}
+
 async function ensurePlanningContext(companyId: string, scenarioId: string, versionId: string) {
   const version = await db.query(
     `SELECT pv.id, pv.company_id, pv.scenario_id, pv.assumption_set_id, pv.status, pv.is_frozen
@@ -94,13 +101,16 @@ async function resolveQueuedPeriodRange(companyId: string) {
   );
 
   const row = result.rows[0];
-  if (!row?.start_date || !row?.end_date) {
+  const startDate = asCanonicalDate(row?.start_date);
+  const endDate = asCanonicalDate(row?.end_date);
+
+  if (!startDate || !endDate) {
     return null;
   }
 
   return {
-    start: String(row.start_date),
-    end: String(row.end_date),
+    start: startDate,
+    end: endDate,
   };
 }
 

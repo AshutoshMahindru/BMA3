@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '..');
 const migrationsDir = path.join(repoRoot, 'db', 'migrations', 'pgm');
 const binPath = path.join(repoRoot, 'node_modules', '.bin', 'node-pg-migrate');
+const sqlRunnerPath = path.join(repoRoot, 'scripts', 'run-sql-migrations.mjs');
 
 function defaultDatabaseUrl() {
   if (process.env.DATABASE_URL) {
@@ -21,9 +22,10 @@ function defaultDatabaseUrl() {
   return `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
 }
 
+const databaseUrl = defaultDatabaseUrl();
 const mode = process.argv[2] || 'up';
 const additionalArgs = process.argv.slice(3);
-const args = [mode, '--db-url', defaultDatabaseUrl(), '--migrations-dir', migrationsDir];
+const args = [mode, '--db-url', databaseUrl, '--migrations-dir', migrationsDir];
 
 if (mode === 'create') {
   const migrationName = additionalArgs[0] || 'new-migration';
@@ -38,7 +40,27 @@ if (mode !== 'create') {
 const result = spawnSync(binPath, args, {
   cwd: repoRoot,
   stdio: 'inherit',
-  env: process.env,
+  env: {
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+  },
 });
 
-process.exit(result.status ?? 1);
+if ((result.status ?? 1) !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+if (mode === 'up') {
+  const sqlResult = spawnSync(process.execPath, [sqlRunnerPath], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+    },
+  });
+
+  process.exit(sqlResult.status ?? 1);
+}
+
+process.exit(0);

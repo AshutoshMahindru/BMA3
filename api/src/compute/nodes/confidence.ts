@@ -39,6 +39,7 @@ import { logger } from '../../lib/logger';
 interface AssumptionDQI {
   variable_name: string;
   family: string;
+  pack_id?: string;
   evidence_type: string;
   source_quality_score: number;
   freshness_score: number;
@@ -293,6 +294,28 @@ export async function executeConfidence(
 
   const assumptions = state.assumptions;
 
+  const familyPackRows = await db.query(
+    `SELECT DISTINCT ON (COALESCE(ap.assumption_family, ap.family))
+            COALESCE(ap.assumption_family, ap.family) AS family,
+            ap.id AS pack_id
+       FROM assumption_packs ap
+       LEFT JOIN assumption_pack_bindings apb
+         ON apb.pack_id = ap.id
+      WHERE ap.company_id = $1
+        AND ap.is_deleted = FALSE
+        AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
+        AND (apb.assumption_set_id = $2 OR ap.assumption_set_id = $2)
+      ORDER BY COALESCE(ap.assumption_family, ap.family), ap.created_at DESC, ap.id DESC`,
+    [ctx.company_id, ctx.assumption_set_id]
+  );
+
+  const familyPackMap = new Map<string, string>();
+  for (const row of familyPackRows.rows) {
+    if (row.family && row.pack_id) {
+      familyPackMap.set(row.family, row.pack_id);
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // 1. LOAD EXISTING DQI SCORES AND CONFIDENCE ASSESSMENTS
   // ══════════════════════════════════════════════════════════════════════════
@@ -376,14 +399,18 @@ export async function executeConfidence(
     // DDL: assumption_field_bindings columns: id, pack_id, variable_name, grain_signature,
     //   value, unit, evidence_ref, evidence_type, is_override, created_at, updated_at
     const bindingResult = await db.query(
-      `SELECT afb.id, afb.evidence_type, afb.evidence_ref, afb.updated_at
+      `SELECT afb.id, afb.pack_id, afb.evidence_type, afb.evidence_ref, afb.updated_at
        FROM assumption_field_bindings afb
        JOIN assumption_packs ap ON afb.pack_id = ap.id
+       LEFT JOIN assumption_pack_bindings apb ON apb.pack_id = ap.id
        WHERE ap.company_id = $1
          AND afb.variable_name = $2
+         AND ap.is_deleted = FALSE
+         AND ap.status::text NOT IN ('rejected', 'archived', 'deprecated')
+         AND (apb.assumption_set_id = $3 OR ap.assumption_set_id = $3)
        ORDER BY afb.updated_at DESC
        LIMIT 1`,
-      [ctx.company_id, varName]
+      [ctx.company_id, varName, ctx.assumption_set_id]
     );
 
     const binding = bindingResult.rows[0];
@@ -464,6 +491,7 @@ export async function executeConfidence(
     dqiResults.push({
       variable_name: varName,
       family,
+      pack_id: binding?.pack_id ?? familyPackMap.get(family),
       evidence_type: evidenceType,
       source_quality_score: sourceQualityScore,
       freshness_score: freshnessScore,
@@ -569,23 +597,34 @@ export async function executeConfidence(
       lowest_critical: lowestCritical,
     });
 
+    const familyScopeId =
+      members.map((m) => m.pack_id).find((packId): packId is string => typeof packId === 'string' && packId.length > 0) ??
+      familyPackMap.get(family);
+
     // DDL: confidence_rollups(id, company_id, rollup_scope, scope_id,
     //   weighted_score, lowest_critical_score, assessment_count, computed_at)
-    await db.query(
-      `INSERT INTO confidence_rollups
-         (id, company_id, rollup_scope, scope_id,
-          weighted_score, lowest_critical_score, assessment_count, computed_at)
-       VALUES ($1, $2, 'assumption_family', $3,
-               $4, $5, $6, NOW())
-       ON CONFLICT (company_id, rollup_scope, scope_id)
-       DO UPDATE SET
-         weighted_score = $4, lowest_critical_score = $5,
-         assessment_count = $6, computed_at = NOW()`,
-      [
-        uuidv4(), ctx.company_id, family,
-        familyScore, lowestCritical, members.length,
-      ]
-    );
+    if (familyScopeId) {
+      await db.query(
+        `INSERT INTO confidence_rollups
+           (id, company_id, rollup_scope, scope_id,
+            weighted_score, lowest_critical_score, assessment_count, computed_at)
+         VALUES ($1, $2, 'assumption_family', $3,
+                 $4, $5, $6, NOW())
+         ON CONFLICT (company_id, rollup_scope, scope_id)
+         DO UPDATE SET
+           weighted_score = $4, lowest_critical_score = $5,
+           assessment_count = $6, computed_at = NOW()`,
+        [
+          uuidv4(), ctx.company_id, familyScopeId,
+          familyScore, lowestCritical, members.length,
+        ]
+      );
+    } else {
+      logger.warn(
+        { family, assumptionSetId: ctx.assumption_set_id },
+        'Skipping confidence family rollup persistence because no pack UUID was resolved for the active assumption set',
+      );
+    }
 
     logger.info(
       {

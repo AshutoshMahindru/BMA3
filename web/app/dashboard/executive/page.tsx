@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Info, AlertCircle, Download, Printer } from 'lucide-react';
+import { AlertCircle, Download, Printer, RefreshCcw, Sparkles } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { getFinancialsExecutiveSummary } from '@/lib/api-client';
+import { createAiAnalyze, createAiResearchDraft, getFinancialsExecutiveSummary } from '@/lib/api-client';
 import { exportCSV, exportPDF } from '@/lib/export';
 import DataFreshness from '@/components/data-freshness';
+import AiSmeOverlay from '@/components/ai-sme-overlay';
 
 /* ══════════════════════ S02: Executive Planning Cockpit ══════════════════════ */
 
@@ -50,6 +51,19 @@ interface Alert {
   color: string;
 }
 
+interface AiInsight {
+  title: string;
+  description: string;
+  severity: string;
+  relatedEntities: unknown[];
+}
+
+interface AiResearchEvidence {
+  title: string;
+  snippet: string;
+  sourceUrl: string;
+}
+
 const fmt = (val: number) =>
   new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
 
@@ -57,11 +71,22 @@ const fmtK = (val: number) => `AED ${fmt(Math.round(val / 1000))}K`;
 
 export default function ExecutiveCockpit() {
   const ctx = usePlanningContext();
+  const activeScenario = ctx.scenarios.find((scenario) => scenario.scenarioId === ctx.scenarioId);
+  const activeVersionId = activeScenario?.latestVersionId;
 
   const [summary, setSummary] = useState<ExecutiveSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<AiInsight[]>([]);
+  const [aiCaveats, setAiCaveats] = useState<string[]>([]);
+  const [aiConfidenceNote, setAiConfidenceNote] = useState('');
+  const [researchDraft, setResearchDraft] = useState('');
+  const [researchEvidence, setResearchEvidence] = useState<AiResearchEvidence[]>([]);
+  const [aiReloadKey, setAiReloadKey] = useState(0);
 
   useEffect(() => {
     if (!ctx.companyId || !ctx.scenarioId) return;
@@ -85,6 +110,67 @@ export default function ExecutiveCockpit() {
       })
       .finally(() => setLoading(false));
   }, [ctx.companyId, ctx.scenarioId, ctx.periodStart]);
+
+  useEffect(() => {
+    if (!aiOpen || !ctx.companyId || !ctx.scenarioId) return;
+
+    const companyId = ctx.companyId;
+    const scenarioId = ctx.scenarioId;
+    let ignore = false;
+
+    const loadAiOverlay = async () => {
+      setAiLoading(true);
+      setAiError(null);
+
+      try {
+        const [analysisResult, researchResult] = await Promise.all([
+          createAiAnalyze({
+            context: {
+              companyId,
+              scenarioId,
+              versionId: activeVersionId,
+              surface: 'executive_cockpit',
+            },
+            analysisType: 'recommendation',
+            targetMetric: 'EBITDA',
+          }),
+          createAiResearchDraft({
+            entityType: 'scenario',
+            entityId: scenarioId,
+            researchQuestion: 'Which external diligence checks should leadership review before approving this plan?',
+            context: {
+              companyId,
+              scenarioId,
+              versionId: activeVersionId,
+              surface: 'executive_cockpit',
+            },
+          }),
+        ]);
+
+        if (ignore) return;
+
+        setAiInsights((analysisResult.data?.insights || []) as AiInsight[]);
+        setAiCaveats((analysisResult.data?.caveats || []) as string[]);
+        setAiConfidenceNote(analysisResult.data?.confidenceNote || '');
+        setResearchDraft(researchResult.data?.draftNote || '');
+        setResearchEvidence((researchResult.data?.suggestedEvidence || []) as AiResearchEvidence[]);
+      } catch (loadError) {
+        if (!ignore) {
+          setAiError(loadError instanceof Error ? loadError.message : 'Failed to load AI advisory brief');
+        }
+      } finally {
+        if (!ignore) {
+          setAiLoading(false);
+        }
+      }
+    };
+
+    loadAiOverlay();
+
+    return () => {
+      ignore = true;
+    };
+  }, [aiOpen, aiReloadKey, activeVersionId, ctx.companyId, ctx.scenarioId]);
 
   // ── KPI cards built from live data ────────────────────────────────────────
   const kpis = summary
@@ -116,6 +202,14 @@ export default function ExecutiveCockpit() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAiOpen(true)}
+            disabled={!ctx.companyId || !ctx.scenarioId}
+            className="flex items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-[10px] font-bold text-teal-900 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> AI Strategy SME
+          </button>
           <button
             onClick={() => {
               const h = ['Scenario', 'Revenue', 'EBITDA', 'IRR', 'Payback'];
@@ -346,6 +440,104 @@ export default function ExecutiveCockpit() {
           </div>
         )}
       </div>
+
+      <AiSmeOverlay
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        title="Executive AI Strategy SME"
+        subtitle="Advisory briefing grounded in the current company, scenario, and latest version context."
+        footer={(
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">Advisory only. Review the underlying model outputs and governed evidence before acting.</p>
+            <button
+              type="button"
+              onClick={() => setAiReloadKey((value) => value + 1)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Refresh
+            </button>
+          </div>
+        )}
+      >
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-800">Confidence note</p>
+            <p className="mt-2 text-sm text-teal-950">{aiConfidenceNote || 'Run the advisory brief to summarize the current executive planning posture.'}</p>
+          </div>
+
+          {aiLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-10 text-center shadow-sm">
+              <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-teal-600" />
+              <p className="mt-3 text-sm font-medium text-slate-500">Preparing the executive AI brief…</p>
+            </div>
+          ) : null}
+
+          {!aiLoading && aiError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-4">
+              <p className="text-sm font-semibold text-rose-800">AI advisory brief unavailable</p>
+              <p className="mt-1 text-xs text-rose-700">{aiError}</p>
+            </div>
+          ) : null}
+
+          {!aiLoading && !aiError ? (
+            <>
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Leadership signals</h3>
+                <div className="mt-3 space-y-3">
+                  {aiInsights.length > 0 ? aiInsights.map((insight) => (
+                    <div key={insight.title} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-slate-900">{insight.title}</p>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                          insight.severity === 'high'
+                            ? 'bg-rose-100 text-rose-700'
+                            : insight.severity === 'medium'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {insight.severity}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-slate-600">{insight.description}</p>
+                    </div>
+                  )) : (
+                    <p className="text-sm text-slate-500">No advisory insights were returned for the current context.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Research draft</h3>
+                <p className="mt-3 text-sm leading-6 text-slate-700">{researchDraft || 'No research draft is available for this scenario yet.'}</p>
+                <div className="mt-4 space-y-2">
+                  {researchEvidence.length > 0 ? researchEvidence.map((evidence) => (
+                    <div key={`${evidence.title}:${evidence.sourceUrl}`} className="rounded-xl border border-slate-100 px-3 py-3">
+                      <p className="text-xs font-semibold text-slate-900">{evidence.title}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-600">{evidence.snippet}</p>
+                    </div>
+                  )) : (
+                    <p className="text-xs text-slate-500">No linked evidence snippets were suggested.</p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Caveats</h3>
+                <ul className="mt-3 space-y-2">
+                  {aiCaveats.length > 0 ? aiCaveats.map((caveat) => (
+                    <li key={caveat} className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                      {caveat}
+                    </li>
+                  )) : (
+                    <li className="text-xs text-slate-500">No additional caveats were surfaced.</li>
+                  )}
+                </ul>
+              </section>
+            </>
+          ) : null}
+        </div>
+      </AiSmeOverlay>
     </div>
   );
 }
