@@ -2,9 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// ── BullMQ worker — must be imported before routes so the worker process starts ──
-import './jobs';
-
 // ── SpecOS-aligned routes (canonical namespace) ──
 import contextRouter from './routes/v1/context';
 import assumptionsRouter from './routes/v1/assumptions';
@@ -12,6 +9,13 @@ import financialsRouter from './routes/v1/financials';
 import computeRouter from './routes/v1/compute';
 
 dotenv.config();
+
+if (process.env.ENABLE_LEGACY_QUEUE === 'true') {
+  // Keep the queue worker opt-in during pre-refactor stabilization so local
+  // and CI boots are deterministic even when Redis is unavailable.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('./jobs');
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;

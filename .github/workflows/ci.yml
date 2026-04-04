@@ -87,3 +87,50 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  api-smoke:
+    name: 🧪 API — Canonical Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Start Postgres
+        run: docker compose up -d postgres
+
+      - name: Install API dependencies
+        working-directory: api
+        run: npm ci
+
+      - name: Start API
+        working-directory: api
+        run: |
+          nohup npm run dev >/tmp/bma3-api.log 2>&1 &
+
+      - name: Wait for API health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4000/api/v1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to become healthy"
+          cat /tmp/bma3-api.log
+          exit 1
+
+      - name: Canonical smoke
+        working-directory: api
+        run: npm run smoke:canonical
+
+      - name: Show API log on failure
+        if: failure()
+        run: cat /tmp/bma3-api.log
