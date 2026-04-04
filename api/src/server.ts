@@ -8,6 +8,8 @@ import assumptionsRouter from './routes/v1/assumptions';
 import financialsRouter from './routes/v1/financials';
 import computeRouter from './routes/v1/compute';
 import analysisRouter from './routes/v1/analysis';
+import confidenceRouter from './routes/v1/confidence';
+import governanceRouter from './routes/v1/governance';
 
 dotenv.config();
 
@@ -25,6 +27,8 @@ app.use('/api/v1/assumptions', assumptionsRouter);
 app.use('/api/v1/financials', financialsRouter);
 app.use('/api/v1/compute', computeRouter);
 app.use('/api/v1/analysis', analysisRouter);
+app.use('/api/v1/confidence', confidenceRouter);
+app.use('/api/v1/governance', governanceRouter);
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {

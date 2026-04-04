@@ -98,14 +98,23 @@ their acceptance gates.
 ### Wave 4: Full Rewire (all APIs + all pages)
 | Target | Status | Generated From |
 |---|---|---|
-| `api/src/routes/v1/analysis.ts` | **PARTIAL** | `api_contracts.json` — risk + simulation only |
+| `api/src/routes/v1/analysis.ts` | **DONE** | `api_contracts.json` — comparisons, explainability, sensitivity, risk, simulation, alerts, portfolio |
 | `api/src/routes/v1/scope/*.ts` | **NOT_STARTED** | `api_contracts.json` scope |
 | `api/src/routes/v1/decisions/*.ts` | **NOT_STARTED** | `api_contracts.json` decisions |
-| `api/src/routes/v1/confidence/*.ts` | **NOT_STARTED** | `api_contracts.json` confidence |
-| `api/src/routes/v1/governance/*.ts` | **NOT_STARTED** | `api_contracts.json` governance |
+| `api/src/routes/v1/confidence/*.ts` | **DONE** | `api_contracts.json` confidence |
+| `api/src/routes/v1/governance/*.ts` | **DONE** | `api_contracts.json` governance |
 | Core finance screens rewired | **DONE** | `traceability.json` |
-| `web/app/dashboard/risk/page.tsx` | **DONE** | canonical `analysis/risk` |
-| `web/app/dashboard/simulations/page.tsx` | **DONE** | canonical `analysis/simulation-runs` |
+| `web/app/dashboard/confidence/page.tsx` | **DONE** | `traceability.json` + confidence routes |
+| `web/app/dashboard/governance/page.tsx` | **DONE** | `traceability.json` + governance routes |
+| `web/app/dashboard/versions/page.tsx` | **DONE** | `traceability.json` + governance routes |
+| `web/app/dashboard/decisions/page.tsx` | **DONE** | `traceability.json` + governance routes |
+| `web/app/dashboard/triggers/page.tsx` | **DONE** | `traceability.json` + analysis/confidence routes |
+| `web/app/dashboard/explainability/page.tsx` | **DONE** | `traceability.json` + analysis routes |
+| `web/app/dashboard/scenario/page.tsx` | **DONE** | `traceability.json` + analysis routes |
+| `web/app/dashboard/portfolio/page.tsx` | **DONE** | `traceability.json` + analysis routes |
+| `web/app/dashboard/attractiveness/page.tsx` | **DONE** | `traceability.json` + analysis routes |
+| `web/app/dashboard/risk/page.tsx` | **DONE** | canonical `analysis/risk` — live only, no static fallback |
+| `web/app/dashboard/simulations/page.tsx` | **DONE** | canonical `analysis/simulation-runs` — live only, no static fallback |
 | `web/app/dashboard/assumptions/page.tsx` | **PARTIAL** | preview shell only |
 | `web/app/dashboard/markets/page.tsx` | **NOT_STARTED** | still on legacy fallback path |
 | Delete `/dashboard/simulations/` duplicate | **NOT_STARTED** | audit finding |
@@ -135,7 +144,7 @@ These are the main files that still block a full Wave 4 completion:
 
 ## Compliance Snapshot
 
-Last verified during status rebase:
+Last verified during Phase 5 execution:
 
 - `python3 scripts/spec-compliance.py`
 - Result: **COMPLIANT**
@@ -156,3 +165,4 @@ Warnings still include:
 | 2 | 2026-04-04 | stabilization | Runtime alignment: fixed schema/seed drift, canonical context/assumptions/financials/compute routes live, seeded finance outputs, core finance screens rewired, canonical smoke path added | execution-green core slice |
 | 3 | 2026-04-04 | stabilization | Retired BullMQ/Redis runtime path, added canonical analysis bridge, rewired risk and simulations, pruned legacy helpers | compliant, 0 failures |
 | 4 | 2026-04-04 | status rebase | Rebased wave tracker to merged baseline through `bd66c3a`; marked generated vs live vs remaining work accurately | compliant, 0 failures |
+| 5 | 2026-04-04 | Wave 4 | Executed SpecOS Phase 5 interpretation/trust slice: mounted analysis/confidence/governance routes, rewired confidence/governance/versions/decisions/triggers/explainability/scenario/portfolio/attractiveness, removed risk/simulation fallback behavior, and verified `api` + `web` production builds | compliant, 0 failures |

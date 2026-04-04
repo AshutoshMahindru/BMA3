@@ -1,50 +1,37 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Activity, BarChart, Play, RotateCcw, Sliders, Target, Zap } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { Play, RotateCcw, BarChart, Activity, Sliders, Info, Zap, Target, CheckCircle2 } from 'lucide-react';
 import DataFreshness from '@/components/data-freshness';
 import { createAnalysisSimulationRuns, getAnalysisSimulationRunsById } from '@/lib/api-client';
-import type { DataSource } from '@/lib/data-source';
+import { asArray, asRecord, formatMoney, toNumber, toText } from '@/lib/phase5-utils';
 
-/* ── Types ── */
 interface SimulationSummary {
-  metric_name: string;
-  p10_value: number;
-  p25_value: number;
-  p50_value: number;
-  p75_value: number;
-  p90_value: number;
-  mean_value: number;
-  std_dev: number;
-}
-
-/* ── Constants ── */
-const FALLBACK_SUMMARIES: SimulationSummary[] = [
-  { metric_name: 'EBITDA', p10_value: 850, p25_value: 920, p50_value: 1050, p75_value: 1180, p90_value: 1300, mean_value: 1065, std_dev: 180 },
-  { metric_name: 'Net Revenue', p10_value: 4200, p25_value: 4500, p50_value: 4800, p75_value: 5100, p90_value: 5500, mean_value: 4850, std_dev: 500 },
-];
-
-function toThousands(value: unknown): number {
-  return Number(value || 0) / 1000;
+  metricName: string;
+  p10: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p90: number;
+  mean: number;
+  stdDev: number;
 }
 
 function normalizeSummary(item: unknown): SimulationSummary | null {
-  if (!item || typeof item !== 'object') return null;
-
-  const value = item as Record<string, unknown>;
-  const metricName = typeof value.metric_name === 'string' ? value.metric_name : '';
+  const value = asRecord(item);
+  const metricName = toText(value.metric_name, '');
   if (!metricName) return null;
 
   return {
-    metric_name: metricName,
-    p10_value: toThousands(value.p10_value),
-    p25_value: toThousands(value.p25_value),
-    p50_value: toThousands(value.p50_value),
-    p75_value: toThousands(value.p75_value),
-    p90_value: toThousands(value.p90_value),
-    mean_value: toThousands(value.mean_value),
-    std_dev: toThousands(value.std_dev),
+    metricName,
+    p10: toNumber(value.p10_value),
+    p25: toNumber(value.p25_value),
+    p50: toNumber(value.p50_value),
+    p75: toNumber(value.p75_value),
+    p90: toNumber(value.p90_value),
+    mean: toNumber(value.mean_value),
+    stdDev: toNumber(value.std_dev),
   };
 }
 
@@ -52,58 +39,48 @@ export default function SimulationLab() {
   const ctx = usePlanningContext();
   const [isRunning, setIsRunning] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
-  const [results, setResults] = useState<SimulationSummary[]>(FALLBACK_SUMMARIES);
-  const [source, setSource] = useState<DataSource>('static');
+  const [results, setResults] = useState<SimulationSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
-  
-  // Simulation Inputs
+
   const [volumeUncertainty, setVolumeUncertainty] = useState(15);
   const [priceVariability, setPriceVariability] = useState(5);
   const [costShock, setCostShock] = useState(10);
   const [iterations, setIterations] = useState(1000);
 
-  const scenarioId = ctx.scenarioId || '';
-
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadSimulationResults() {
-      if (!runId) {
-        setResults(FALLBACK_SUMMARIES);
-        setSource('static');
-        setLastFetched(null);
-        return;
-      }
-
-      setSource('loading');
-      const result = await getAnalysisSimulationRunsById(runId);
-
-      if (cancelled) return;
-
-      const rawResults = result.data?.results as Record<string, unknown> | undefined;
-      const rawSummaries = Array.isArray(rawResults?.summaries) ? rawResults.summaries : [];
-      const normalizedSummaries = rawSummaries
-        .map(normalizeSummary)
-        .filter((item): item is SimulationSummary => item !== null);
-
-      if (normalizedSummaries.length > 0) {
-        setResults(normalizedSummaries);
-        setSource('api');
-        setLastFetched(result.data?.completedAt ? new Date(result.data.completedAt) : new Date());
-        return;
-      }
-
-      setResults(FALLBACK_SUMMARIES);
-      setSource('static');
-      setLastFetched(null);
+    if (!runId) {
+      setResults([]);
+      return;
     }
 
-    loadSimulationResults().catch(() => {
-      if (cancelled) return;
-      setResults(FALLBACK_SUMMARIES);
-      setSource('static');
-      setLastFetched(null);
-    });
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getAnalysisSimulationRunsById(runId)
+      .then((result) => {
+        if (cancelled) return;
+        const value = asRecord(result.data);
+        const resultRecord = asRecord(value.results);
+        const nextResults = asArray(resultRecord.summaries)
+          .map(normalizeSummary)
+          .filter((item): item is SimulationSummary => item !== null);
+
+        setResults(nextResults);
+        const completedAt = toText(value.completedAt, '');
+        setLastFetched(completedAt ? new Date(completedAt) : new Date());
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load simulation results');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -111,75 +88,67 @@ export default function SimulationLab() {
   }, [runId]);
 
   const handleRunSimulation = async () => {
-    if (!scenarioId) return;
+    if (!ctx.scenarioId) return;
+
     setIsRunning(true);
-    setSource('loading');
+    setError(null);
 
-    const { data } = await createAnalysisSimulationRuns({
-      baseScenarioId: scenarioId,
-      label: `${ctx.scenarioName} Monte Carlo`,
-      shocks: [
-        { driver: 'volume', magnitudePct: volumeUncertainty },
-        { driver: 'price', magnitudePct: priceVariability },
-        { driver: 'cost', magnitudePct: costShock },
-        { driver: 'iterations', value: iterations },
-      ],
-    });
+    try {
+      const created = await createAnalysisSimulationRuns({
+        baseScenarioId: ctx.scenarioId,
+        label: `${ctx.scenarioName} Monte Carlo`,
+        shocks: [
+          { driver: 'volume', magnitudePct: volumeUncertainty },
+          { driver: 'price', magnitudePct: priceVariability },
+          { driver: 'cost', magnitudePct: costShock },
+          { driver: 'iterations', value: iterations },
+        ],
+      });
 
-    if (data?.runId) {
-      setRunId(data.runId);
-    } else {
-      setResults(FALLBACK_SUMMARIES);
-      setSource('static');
-      setLastFetched(null);
+      const nextRunId = toText(asRecord(created.data).runId, '');
+      setRunId(nextRunId || null);
+    } catch (runError) {
+      setError(runError instanceof Error ? runError.message : 'Simulation run failed');
+    } finally {
+      setIsRunning(false);
     }
-
-    setIsRunning(false);
   };
 
-  const fmt = (val: number) => 
-    new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
-
-  /* ── Chart Components (SVG based to avoid recharts dependency issues) ── */
   const Histogram = ({ summary }: { summary: SimulationSummary }) => {
-    // Generate 20 bins for the normal distribution mock
-    const bins = useMemo(() => {
-        const { mean_value, std_dev } = summary;
-        const b = [];
-        for (let i = -3; i <= 3; i += 0.3) {
-            const x = mean_value + i * std_dev;
-            const y = Math.exp(-0.5 * Math.pow(i, 2)) / (std_dev * Math.sqrt(2 * Math.PI));
-            b.push({ x, height: y * 50000 }); // Scaling factor for visual
-        }
-        return b;
-    }, [summary]);
+    const bins = [];
+    for (let step = -3; step <= 3; step += 0.3) {
+      const x = summary.mean + step * summary.stdDev;
+      const y = Math.exp(-0.5 * Math.pow(step, 2)) / Math.max(summary.stdDev, 1);
+      bins.push({ x, height: y * 100 });
+    }
 
-    const maxH = Math.max(...bins.map(b => b.height));
+    const maxH = Math.max(...bins.map((bin) => bin.height), 1);
 
     return (
       <div className="relative h-48 w-full mt-4 flex items-end justify-between px-2 gap-1 border-b border-gray-100">
-         {bins.map((bin, i) => (
-            <div 
-               key={i} 
-               className="flex-1 bg-[#4A90E2] rounded-t-sm transition-all duration-700 hover:bg-[#1E5B9C] cursor-help group relative"
-               style={{ height: `${(bin.height / maxH) * 100}%` }}
-            >
-               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-[9px] px-2 py-1 rounded shadow-xl whitespace-nowrap z-20">
-                  Value: {fmt(bin.x)}K
-               </div>
-            </div>
-         ))}
-         {/* Statistic Markers */}
-         <div className="absolute top-0 bottom-0 border-l border-red-400 border-dashed z-10" style={{ left: '10%' }}><span className="absolute -top-4 -left-3 text-[9px] font-bold text-red-500">P10</span></div>
-         <div className="absolute top-0 bottom-0 border-l border-[#1B2A4A] z-10" style={{ left: '50%' }}><span className="absolute -top-5 -left-4 text-[9px] font-bold text-[#1B2A4A]">P50 (Median)</span></div>
-         <div className="absolute top-0 bottom-0 border-l border-emerald-400 border-dashed z-10" style={{ left: '90%' }}><span className="absolute -top-4 -left-3 text-[9px] font-bold text-emerald-500">P90</span></div>
+        {bins.map((bin, index) => (
+          <div
+            key={index}
+            className="flex-1 bg-[#4A90E2] rounded-t-sm transition-all duration-700 hover:bg-[#1E5B9C]"
+            style={{ height: `${(bin.height / maxH) * 100}%` }}
+            title={formatMoney(bin.x)}
+          />
+        ))}
+        <div className="absolute top-0 bottom-0 border-l border-red-400 border-dashed z-10" style={{ left: '10%' }}>
+          <span className="absolute -top-4 -left-3 text-[9px] font-bold text-red-500">P10</span>
+        </div>
+        <div className="absolute top-0 bottom-0 border-l border-[#1B2A4A] z-10" style={{ left: '50%' }}>
+          <span className="absolute -top-5 -left-4 text-[9px] font-bold text-[#1B2A4A]">P50</span>
+        </div>
+        <div className="absolute top-0 bottom-0 border-l border-emerald-400 border-dashed z-10" style={{ left: '90%' }}>
+          <span className="absolute -top-4 -left-3 text-[9px] font-bold text-emerald-500">P90</span>
+        </div>
       </div>
     );
   };
 
   return (
     <div className="flex-1 flex flex-col bg-[#F9FAFB]">
-      {/* Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between">
           <div>
@@ -188,16 +157,16 @@ export default function SimulationLab() {
               Simulation Lab & Monte Carlo Workbench
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-              Probabilistic Modeling — {ctx.scenarioName}
-              <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
+              Probabilistic modeling — {ctx.scenarioName}
+              <DataFreshness source={loading || isRunning ? 'loading' : results.length > 0 ? 'api' : undefined} lastFetched={lastFetched} />
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={() => {
                 setRunId(null);
-                setResults(FALLBACK_SUMMARIES);
-                setSource('static');
+                setResults([]);
+                setError(null);
                 setLastFetched(null);
                 setVolumeUncertainty(15);
                 setPriceVariability(5);
@@ -208,12 +177,10 @@ export default function SimulationLab() {
             >
               <RotateCcw className="w-4 h-4" />
             </button>
-            <button 
+            <button
               onClick={handleRunSimulation}
-              disabled={isRunning}
-              className={`flex items-center gap-2 text-sm font-bold px-6 py-2 rounded-lg shadow-md transition ${
-                isRunning ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#1E5B9C] hover:bg-[#1B2A4A] text-white'
-              }`}
+              disabled={isRunning || !ctx.scenarioId}
+              className={`flex items-center gap-2 text-sm font-bold px-6 py-2 rounded-lg shadow-md transition ${isRunning || !ctx.scenarioId ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-[#1E5B9C] hover:bg-[#1B2A4A] text-white'}`}
             >
               {isRunning ? <Zap className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
               {isRunning ? `Running ${iterations.toLocaleString()} Iterations...` : 'Execute Monte Carlo'}
@@ -223,187 +190,162 @@ export default function SimulationLab() {
       </div>
 
       <div className="px-6 pb-8 grid grid-cols-12 gap-6">
-        
-        {/* Left: Configuration Panel */}
         <div className="col-span-12 lg:col-span-4 space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-             <div className="flex items-center gap-2 mb-6 border-b border-gray-50 pb-4">
-                <Sliders className="w-4 h-4 text-gray-400" />
-                <h3 className="text-xs font-bold text-gray-800 uppercase tracking-widest">Variable Uncertainty</h3>
-             </div>
-             
-             <div className="space-y-8">
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                     <label className="text-xs font-semibold text-gray-700">Volume Uncertainty (SD%)</label>
-                     <span className="text-xs font-bold text-[#1E5B9C] bg-blue-50 px-2 py-0.5 rounded">±{volumeUncertainty}%</span>
-                  </div>
-                  <input 
-                    type="range" min="0" max="30" step="1" 
-                    value={volumeUncertainty} 
-                    onChange={(e) => setVolumeUncertainty(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1E5B9C]" 
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2">Impacts Gross Orders and Delivery Logistic costs.</p>
-                </div>
+            <div className="flex items-center gap-2 mb-6 border-b border-gray-50 pb-4">
+              <Sliders className="w-4 h-4 text-gray-400" />
+              <h3 className="text-xs font-bold text-gray-800 uppercase tracking-widest">Variable Uncertainty</h3>
+            </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                     <label className="text-xs font-semibold text-gray-700">AOV / Pricing Variability</label>
-                     <span className="text-xs font-bold text-[#1E5B9C] bg-blue-50 px-2 py-0.5 rounded">±{priceVariability}%</span>
-                  </div>
-                  <input 
-                    type="range" min="0" max="15" step="0.5" 
-                    value={priceVariability} 
-                    onChange={(e) => setPriceVariability(parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1E5B9C]" 
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2">Simulates promo fatigue and competitor pricing shocks.</p>
+            <div className="space-y-8">
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-xs font-semibold text-gray-700">Volume Uncertainty</label>
+                  <span className="text-xs font-bold text-[#1E5B9C] bg-blue-50 px-2 py-0.5 rounded">±{volumeUncertainty}%</span>
                 </div>
+                <input type="range" min="0" max="40" step="5" value={volumeUncertainty} onChange={(event) => setVolumeUncertainty(parseInt(event.target.value, 10))} className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1E5B9C]" />
+              </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                     <label className="text-xs font-semibold text-gray-700">Cost Shock Probability</label>
-                     <span className="text-xs font-bold text-[#E67E22] bg-orange-50 px-2 py-0.5 rounded">{costShock}%</span>
-                  </div>
-                  <input 
-                    type="range" min="0" max="50" step="5" 
-                    value={costShock} 
-                    onChange={(e) => setCostShock(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#E67E22]" 
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2">Probability of a +20% spike in COGS/Labor.</p>
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-xs font-semibold text-gray-700">Price Variability</label>
+                  <span className="text-xs font-bold text-[#1A7A4A] bg-green-50 px-2 py-0.5 rounded">±{priceVariability}%</span>
                 </div>
+                <input type="range" min="0" max="20" step="1" value={priceVariability} onChange={(event) => setPriceVariability(parseInt(event.target.value, 10))} className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1A7A4A]" />
+              </div>
 
-                <div className="pt-4 border-t border-gray-50">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                       <Target className="w-3 h-3" /> Distribution Engine
-                     </p>
-                     <select className="w-full bg-transparent border-none text-xs font-bold text-gray-700 focus:ring-0 p-0">
-                        <option>Normal (Gaussian)</option>
-                        <option>Triangular</option>
-                        <option>Log-Normal</option>
-                     </select>
-                  </div>
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-xs font-semibold text-gray-700">Cost Shock Probability</label>
+                  <span className="text-xs font-bold text-[#E67E22] bg-orange-50 px-2 py-0.5 rounded">{costShock}%</span>
                 </div>
-             </div>
+                <input type="range" min="0" max="50" step="5" value={costShock} onChange={(event) => setCostShock(parseInt(event.target.value, 10))} className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#E67E22]" />
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <label className="text-xs font-semibold text-gray-700">Iterations</label>
+                  <span className="text-xs font-bold text-[#1B2A4A] bg-slate-100 px-2 py-0.5 rounded">{iterations.toLocaleString()}</span>
+                </div>
+                <input type="range" min="500" max="5000" step="500" value={iterations} onChange={(event) => setIterations(parseInt(event.target.value, 10))} className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-[#1B2A4A]" />
+              </div>
+            </div>
           </div>
 
           <div className="bg-[#1B2A4A] rounded-xl p-6 text-white shadow-lg">
-             <div className="flex items-center gap-2 mb-4">
-                <Target className="w-4 h-4 text-[#4A90E2]" />
-                <h4 className="text-xs font-bold uppercase tracking-widest text-white">Confidence Targets</h4>
-             </div>
-             <div className="space-y-4">
-                <div className="flex justify-between items-end border-b border-white/10 pb-3">
-                   <div>
-                      <p className="text-[10px] text-white/50 uppercase font-bold tracking-tight">EBITDA &gt; 1M AED</p>
-                      <p className="text-xl font-bold">82% <span className="text-xs font-normal text-emerald-400">Confidence</span></p>
-                   </div>
-                   <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-1" />
-                </div>
-                <div className="flex justify-between items-end">
-                   <div>
-                      <p className="text-[10px] text-white/50 uppercase font-bold tracking-tight">Break-even Coverage</p>
-                      <p className="text-xl font-bold">94% <span className="text-xs font-normal text-emerald-400">High</span></p>
-                   </div>
-                   <CheckCircle2 className="w-5 h-5 text-emerald-400 mb-1" />
-                </div>
-             </div>
+            <div className="flex items-center gap-2 mb-4">
+              <Target className="w-4 h-4 text-[#4A90E2]" />
+              <h4 className="text-xs font-bold uppercase tracking-widest text-white">Run Profile</h4>
+            </div>
+            <div className="space-y-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-white/60">Scenario</span>
+                <span className="font-bold">{ctx.scenarioName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Iterations</span>
+                <span className="font-bold">{iterations.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/60">Run id</span>
+                <span className="font-mono text-[11px]">{runId ? runId.slice(0, 8) : 'pending'}</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Right: Results Dashboard */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
-           {/* Summary Cards */}
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {results.slice(0, 3).map((res, i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{res.metric_name} (Mean)</p>
-                   <div className="flex items-baseline gap-2 mt-1">
-                      <p className="text-xl font-bold text-gray-900">AED {fmt(res.mean_value)}K</p>
-                      <p className="text-[10px] font-bold text-[#E67E22]">σ ±{fmt(res.std_dev)}K</p>
-                   </div>
-                   <div className="mt-4 grid grid-cols-3 gap-1">
-                      <div className="text-center bg-gray-50 rounded py-1.5">
-                         <p className="text-[8px] text-gray-400 font-bold">P10</p>
-                         <p className="text-[10px] font-bold text-gray-700">{fmt(res.p10_value)}K</p>
-                      </div>
-                      <div className="text-center bg-blue-50 rounded py-1.5 border border-blue-100">
-                         <p className="text-[8px] text-[#1E5B9C] font-bold">P50</p>
-                         <p className="text-[10px] font-bold text-[#1E5B9C]">{fmt(res.p50_value)}K</p>
-                      </div>
-                      <div className="text-center bg-gray-50 rounded py-1.5">
-                         <p className="text-[8px] text-gray-400 font-bold">P90</p>
-                         <p className="text-[10px] font-bold text-gray-700">{fmt(res.p90_value)}K</p>
-                      </div>
-                   </div>
-                </div>
-              ))}
-           </div>
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm">
+              <p className="text-sm font-semibold text-red-800">Simulation data could not be loaded</p>
+              <p className="text-xs text-red-600 mt-1">{error}</p>
+            </div>
+          )}
 
-           {/* Histograms */}
-           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {results.map((res, i) => (
-                <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-                   <div className="flex items-center justify-between mb-2">
+          {!error && results.length === 0 && !loading && !isRunning && (
+            <div className="bg-white rounded-xl border border-gray-200 p-10 text-sm text-gray-400 shadow-sm">
+              Execute a simulation run to populate probability distributions for the selected scenario.
+            </div>
+          )}
+
+          {results.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {results.slice(0, 3).map((result) => (
+                  <div key={result.metricName} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{result.metricName} (Mean)</p>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <p className="text-xl font-bold text-gray-900">{formatMoney(result.mean)}</p>
+                      <p className="text-[10px] font-bold text-[#E67E22]">σ {formatMoney(result.stdDev)}</p>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-1">
+                      {[
+                        { label: 'P10', value: result.p10 },
+                        { label: 'P50', value: result.p50 },
+                        { label: 'P90', value: result.p90 },
+                      ].map((percentile) => (
+                        <div key={percentile.label} className="text-center bg-gray-50 rounded py-1.5">
+                          <p className="text-[8px] text-gray-400 font-bold">{percentile.label}</p>
+                          <p className="text-[10px] font-bold text-gray-700">{formatMoney(percentile.value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {results.map((result) => (
+                  <div key={result.metricName} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
                       <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2">
                         <BarChart className="w-4 h-4 text-gray-400" />
-                        {res.metric_name} Probability Distribution
+                        {result.metricName} Probability Distribution
                       </h4>
-                      <Info className="w-3.5 h-3.5 text-gray-300" />
-                   </div>
-                   <Histogram summary={res} />
-                   <div className="mt-4 flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                      <span>Worse Case</span>
-                      <span>Expected Outcome</span>
-                      <span>Upside Potential</span>
-                   </div>
+                    </div>
+                    <Histogram summary={result} />
+                    <div className="mt-4 flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      <span>Downside</span>
+                      <span>Median</span>
+                      <span>Upside</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Simulation Summary Table</h3>
                 </div>
-              ))}
-           </div>
-
-           {/* Sensitivity Matrix Preview (S18) */}
-           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                 <h4 className="text-xs font-bold text-gray-800 uppercase tracking-widest flex items-center gap-2">
-                   <Zap className="w-4 h-4 text-[#E67E22]" />
-                   EBITDA Sensitivity Matrix (Price vs Volume)
-                 </h4>
-                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Impact in AED &apos;000s</span>
-              </div>
-              <div className="overflow-x-auto">
-                 <table className="w-full text-center">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
                     <thead>
-                       <tr>
-                          <th className="bg-gray-50 border border-gray-100 p-2 text-[9px] font-bold text-gray-400 line-clamp-1">PRICE \ VOL</th>
-                          {['-10%', '-5%', 'Base', '+5%', '+10%'].map(v => (
-                            <th key={v} className="bg-gray-50 border border-gray-100 p-2 text-[10px] font-bold text-gray-700">{v}</th>
-                          ))}
-                       </tr>
+                      <tr className="bg-[#D6E4F7]">
+                        {['Metric', 'P10', 'P25', 'P50', 'P75', 'P90', 'Mean', 'Std Dev'].map((header) => (
+                          <th key={header} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{header}</th>
+                        ))}
+                      </tr>
                     </thead>
-                    <tbody>
-                       {['-10%', '-5%', 'Base', '+5%', '+10%'].map((p, pIdx) => (
-                         <tr key={p}>
-                            <td className="bg-gray-50 border border-gray-100 p-2 text-[10px] font-bold text-gray-700">{p}</td>
-                            {[0.7, 0.85, 1.0, 1.15, 1.3].map((v, vIdx) => {
-                               const val = 1050 * v * (1 - (pIdx - 2) * 0.1);
-                               const heatmap = val > 1200 ? 'bg-emerald-100 text-emerald-800' : val < 800 ? 'bg-red-100 text-red-800' : 'bg-blue-50 text-blue-800';
-                               return (
-                                 <td key={vIdx} className={`border border-gray-100 p-3 text-[11px] font-mono font-bold ${heatmap}`}>
-                                    {fmt(val)}
-                                 </td>
-                               );
-                            })}
-                         </tr>
-                       ))}
+                    <tbody className="divide-y divide-gray-100">
+                      {results.map((result, index) => (
+                        <tr key={result.metricName} className={index % 2 === 1 ? 'bg-[#F4F5F7]' : ''}>
+                          <td className="px-4 py-3 font-semibold text-gray-800">{result.metricName}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.p10)}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.p25)}</td>
+                          <td className="px-4 py-3 font-mono font-bold text-[#1E5B9C]">{formatMoney(result.p50)}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.p75)}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.p90)}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.mean)}</td>
+                          <td className="px-4 py-3 font-mono text-gray-700">{formatMoney(result.stdDev)}</td>
+                        </tr>
+                      ))}
                     </tbody>
-                 </table>
+                  </table>
+                </div>
               </div>
-           </div>
+            </>
+          )}
         </div>
-
       </div>
     </div>
   );

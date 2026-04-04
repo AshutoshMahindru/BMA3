@@ -1,225 +1,492 @@
 "use client";
 
-/* ══════════════════════════════════════════════════════════════════════════
-   S10: CONFIDENCE TRACKER — Heatmap Grid + Evidence Log
-   Wireframe v4.0: Heatmap (Modules × Markets: 7×8), Evidence Log table
-   ══════════════════════════════════════════════════════════════════════ */
-
-import { Shield, Filter, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, BarChart3, Clock, Microscope, Shield, Sparkles } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
+import {
+  getConfidenceDqi,
+  getConfidenceEvidence,
+  getConfidenceResearchTasks,
+  getConfidenceRollups,
+  getConfidenceSummary,
+} from '@/lib/api-client';
+import DataFreshness from '@/components/data-freshness';
+import {
+  asArray,
+  asRecord,
+  confidenceTone,
+  formatDate,
+  titleCase,
+  toNumber,
+  toText,
+} from '@/lib/phase5-utils';
 
-/* ── Heatmap Data: Modules × Markets ─────────────────────────────────── */
-const modules = ['Demand', 'Pricing', 'Cost', 'Labor', 'Marketing', 'CAPEX', 'Funding'];
-const markets = ['JLT North', 'Marina', 'Downtown', 'JBR', 'Abu Dhabi', 'Sharjah', 'Al Ain', 'Portfolio'];
+interface ConfidenceSummaryState {
+  overallConfidence: string;
+  evidenceCount: number;
+  lowConfidenceItems: Array<{
+    assessmentId: string;
+    entityType: string;
+    entityId: string;
+    confidenceLevel: string;
+    evidenceCount: number;
+    updatedAt: string;
+  }>;
+  byStage: Array<{
+    stage: string;
+    confidenceLevel: string;
+    averageScore: number;
+    count: number;
+  }>;
+}
 
-// Confidence scores (0-100) per module × market
-const heatmapData: Record<string, Record<string, number>> = {
-  'Demand':    { 'JLT North': 88, 'Marina': 82, 'Downtown': 65, 'JBR': 72, 'Abu Dhabi': 55, 'Sharjah': 48, 'Al Ain': 42, 'Portfolio': 76 },
-  'Pricing':   { 'JLT North': 90, 'Marina': 85, 'Downtown': 78, 'JBR': 80, 'Abu Dhabi': 68, 'Sharjah': 62, 'Al Ain': 58, 'Portfolio': 80 },
-  'Cost':      { 'JLT North': 92, 'Marina': 88, 'Downtown': 82, 'JBR': 85, 'Abu Dhabi': 75, 'Sharjah': 70, 'Al Ain': 65, 'Portfolio': 82 },
-  'Labor':     { 'JLT North': 85, 'Marina': 80, 'Downtown': 72, 'JBR': 75, 'Abu Dhabi': 60, 'Sharjah': 55, 'Al Ain': 50, 'Portfolio': 72 },
-  'Marketing': { 'JLT North': 78, 'Marina': 75, 'Downtown': 62, 'JBR': 68, 'Abu Dhabi': 52, 'Sharjah': 45, 'Al Ain': 40, 'Portfolio': 65 },
-  'CAPEX':     { 'JLT North': 95, 'Marina': 90, 'Downtown': 70, 'JBR': 82, 'Abu Dhabi': 62, 'Sharjah': 58, 'Al Ain': 55, 'Portfolio': 78 },
-  'Funding':   { 'JLT North': 80, 'Marina': 78, 'Downtown': 65, 'JBR': 70, 'Abu Dhabi': 55, 'Sharjah': 50, 'Al Ain': 45, 'Portfolio': 68 },
-};
+interface EvidenceItem {
+  evidenceId: string;
+  title: string;
+  type: string;
+  quality: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
 
-/* ── Evidence Log & Review Schedule ─────────────────────────────────── */
-const evidenceLog = [
-  { module: 'Demand', market: 'Downtown', confidence: 65, evidence: 'Competitor density analysis incomplete', reviewer: 'Strategy', reviewDate: '15 Apr 2026', status: 'Under Review', priority: 'High' },
-  { module: 'Marketing', market: 'Al Ain', confidence: 40, evidence: 'No historical data — new market', reviewer: 'Marketing', reviewDate: '20 Apr 2026', status: 'Flagged', priority: 'Critical' },
-  { module: 'Marketing', market: 'Sharjah', confidence: 45, evidence: 'Limited campaign data — 2 months only', reviewer: 'Marketing', reviewDate: '22 Apr 2026', status: 'Under Review', priority: 'High' },
-  { module: 'Labor', market: 'Abu Dhabi', confidence: 60, evidence: 'Pending labor market survey results', reviewer: 'HR', reviewDate: '25 Apr 2026', status: 'Pending', priority: 'Medium' },
-  { module: 'Demand', market: 'Abu Dhabi', confidence: 55, evidence: 'Soft launch data — 6 weeks only', reviewer: 'Commercial', reviewDate: '28 Apr 2026', status: 'Under Review', priority: 'High' },
-  { module: 'Funding', market: 'Al Ain', confidence: 45, evidence: 'No investor interest confirmed', reviewer: 'CFO', reviewDate: '30 Apr 2026', status: 'Flagged', priority: 'Critical' },
-  { module: 'CAPEX', market: 'Downtown', confidence: 70, evidence: 'Landlord fit-out quote pending revision', reviewer: 'Projects', reviewDate: '01 May 2026', status: 'Pending', priority: 'Medium' },
-  { module: 'Demand', market: 'Al Ain', confidence: 42, evidence: 'Market size estimate from secondary research only', reviewer: 'Strategy', reviewDate: '05 May 2026', status: 'Flagged', priority: 'Critical' },
-];
+interface ResearchTask {
+  taskId: string;
+  title: string;
+  assignee: string;
+  dueDate: string;
+  status: string;
+  entityType: string;
+  entityId: string;
+}
 
-const getConfidenceColor = (score: number) => {
-  if (score >= 85) return 'bg-[#1A7A4A] text-white';
-  if (score >= 70) return 'bg-[#22c55e]/80 text-white';
-  if (score >= 55) return 'bg-[#C47A1E] text-white';
-  if (score >= 40) return 'bg-[#ea580c] text-white';
-  return 'bg-[#C0392B] text-white';
-};
+interface DqiFactor {
+  name: string;
+  score: number;
+}
 
-const getConfidenceBg = (score: number) => {
-  if (score >= 85) return '#1A7A4A';
-  if (score >= 70) return '#22c55e';
-  if (score >= 55) return '#C47A1E';
-  if (score >= 40) return '#ea580c';
-  return '#C0392B';
-};
+interface ConfidenceRollup {
+  entityType: string;
+  entityId: string;
+  aggregateConfidence: string;
+  weakestLinkScore: number;
+  evidenceCount: number;
+}
+
+function normalizeSummary(raw: unknown): ConfidenceSummaryState {
+  const value = asRecord(raw);
+  const byStageRecord = asRecord(value.byStage);
+
+  return {
+    overallConfidence: toText(value.overallConfidence, 'unknown'),
+    evidenceCount: toNumber(value.evidenceCount),
+    lowConfidenceItems: asArray(value.lowConfidenceItems).map((item) => {
+      const row = asRecord(item);
+      return {
+        assessmentId: toText(row.assessmentId, ''),
+        entityType: toText(row.entityType, 'unknown'),
+        entityId: toText(row.entityId, ''),
+        confidenceLevel: toText(row.confidenceLevel, 'unknown'),
+        evidenceCount: toNumber(row.evidenceCount),
+        updatedAt: toText(row.updatedAt, ''),
+      };
+    }).filter((item) => item.assessmentId),
+    byStage: Object.entries(byStageRecord).map(([stage, detail]) => {
+      const row = asRecord(detail);
+      return {
+        stage,
+        confidenceLevel: toText(row.confidenceLevel, 'unknown'),
+        averageScore: toNumber(row.averageScore),
+        count: toNumber(row.count),
+      };
+    }),
+  };
+}
+
+function normalizeEvidence(raw: unknown): EvidenceItem[] {
+  return asArray(raw).map((item) => {
+    const row = asRecord(item);
+    const attachedTo = asRecord(row.attachedTo);
+    return {
+      evidenceId: toText(row.evidenceId, ''),
+      title: toText(row.title, 'Untitled evidence'),
+      type: toText(row.type, 'manual'),
+      quality: toText(row.quality, 'unknown'),
+      entityType: toText(attachedTo.entityType, 'unknown'),
+      entityId: toText(attachedTo.entityId, ''),
+      createdAt: toText(row.createdAt, ''),
+    };
+  }).filter((item) => item.evidenceId);
+}
+
+function normalizeResearchTasks(raw: unknown): ResearchTask[] {
+  return asArray(raw).map((item) => {
+    const row = asRecord(item);
+    const linkedEntity = asRecord(row.linkedEntity);
+    return {
+      taskId: toText(row.taskId, ''),
+      title: toText(row.title, 'Untitled task'),
+      assignee: toText(row.assignee, 'Unassigned'),
+      dueDate: toText(row.dueDate, ''),
+      status: toText(row.status, 'open'),
+      entityType: toText(linkedEntity.entityType, 'unknown'),
+      entityId: toText(linkedEntity.entityId, ''),
+    };
+  }).filter((item) => item.taskId);
+}
+
+function normalizeDqi(raw: unknown): { overallDqi: number; factors: DqiFactor[] } {
+  const value = asRecord(raw);
+
+  return {
+    overallDqi: toNumber(value.overallDqi),
+    factors: asArray(value.factors).map((item) => {
+      const row = asRecord(item);
+      return {
+        name: toText(row.name, 'factor'),
+        score: toNumber(row.score),
+      };
+    }),
+  };
+}
+
+function normalizeRollups(raw: unknown): ConfidenceRollup[] {
+  const value = asRecord(raw);
+
+  return asArray(value.rollups).map((item) => {
+    const row = asRecord(item);
+    const weakestLink = asRecord(row.weakestLink);
+    return {
+      entityType: toText(row.entityType, 'unknown'),
+      entityId: toText(row.entityId, ''),
+      aggregateConfidence: toText(row.aggregateConfidence, 'unknown'),
+      weakestLinkScore: toNumber(weakestLink.score),
+      evidenceCount: toNumber(row.evidenceCount),
+    };
+  }).filter((item) => item.entityId);
+}
 
 export default function ConfidenceTracker() {
   const ctx = usePlanningContext();
+  const [summary, setSummary] = useState<ConfidenceSummaryState | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [researchTasks, setResearchTasks] = useState<ResearchTask[]>([]);
+  const [dqi, setDqi] = useState<{ overallDqi: number; factors: DqiFactor[] }>({ overallDqi: 0, factors: [] });
+  const [rollups, setRollups] = useState<ConfidenceRollup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (!ctx.companyId) {
+      setSummary(null);
+      setEvidence([]);
+      setResearchTasks([]);
+      setDqi({ overallDqi: 0, factors: [] });
+      setRollups([]);
+      setLastFetched(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      getConfidenceSummary({ companyId: ctx.companyId, scenarioId: ctx.scenarioId || undefined }),
+      getConfidenceEvidence({ companyId: ctx.companyId, scenarioId: ctx.scenarioId || undefined, limit: 8 }),
+      getConfidenceResearchTasks({ companyId: ctx.companyId, scenarioId: ctx.scenarioId || undefined, limit: 6 }),
+      getConfidenceDqi({ companyId: ctx.companyId, scenarioId: ctx.scenarioId || undefined }),
+      getConfidenceRollups({ companyId: ctx.companyId, scenarioId: ctx.scenarioId || undefined }),
+    ])
+      .then(([summaryResult, evidenceResult, tasksResult, dqiResult, rollupsResult]) => {
+        if (cancelled) return;
+
+        setSummary(normalizeSummary(summaryResult.data));
+        setEvidence(normalizeEvidence(evidenceResult.data));
+        setResearchTasks(normalizeResearchTasks(tasksResult.data));
+        setDqi(normalizeDqi(dqiResult.data));
+        setRollups(normalizeRollups(rollupsResult.data));
+        setLastFetched(new Date());
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load confidence tracker');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.companyId, ctx.scenarioId]);
+
+  const lowConfidenceCount = summary?.lowConfidenceItems.length || 0;
+  const openTasks = researchTasks.filter((task) => task.status.toLowerCase() !== 'done').length;
+
   return (
     <div className="flex-1 flex flex-col">
-
-      {/* Page Header */}
       <div className="px-6 pt-6 pb-4">
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <Shield className="w-5 h-5 text-[#1E5B9C]" />
           Assumption Confidence Tracker
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {ctx.companyName} — {ctx.scenarioName} — Confidence Assessment Matrix
+        <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
+          {ctx.companyName} — {ctx.scenarioName}
+          <DataFreshness source={loading ? 'loading' : summary ? 'api' : undefined} lastFetched={lastFetched} />
         </p>
       </div>
 
       <div className="px-6 pb-8 space-y-6">
-
-        {/* Filter Strip */}
-        <div className="bg-white rounded-lg border border-gray-200 px-4 py-2.5 flex items-center gap-4 flex-wrap shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
-            <Filter className="w-3.5 h-3.5" />
-            <span className="font-bold uppercase tracking-wider text-[10px]">Filters:</span>
+        {!ctx.companyId && (
+          <div className="bg-white rounded-xl border border-gray-200 p-10 text-sm text-gray-400 shadow-sm">
+            Select a company to load confidence, evidence, and DQI coverage.
           </div>
-          <select className="text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 font-medium text-gray-700">
-            <option>All Modules</option>
-            {modules.map(m => <option key={m}>{m}</option>)}
-          </select>
-          <select className="text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 font-medium text-gray-700">
-            <option>All Confidence</option>
-            <option>Critical (&lt;50%)</option>
-            <option>Low (50-69%)</option>
-            <option>Medium (70-84%)</option>
-            <option>High (85%+)</option>
-          </select>
-          <select className="text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 font-medium text-gray-700">
-            <option>All Statuses</option>
-            <option>Flagged</option>
-            <option>Under Review</option>
-            <option>Pending</option>
-            <option>Confirmed</option>
-          </select>
-        </div>
+        )}
 
-        {/* ═══════ CONFIDENCE HEATMAP ═══════ */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              Confidence Heatmap — Modules × Markets
-            </h3>
-            <div className="flex items-center gap-2 text-[10px] font-medium text-gray-500">
-              <div className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#C0392B]" /> &lt;40%</div>
-              <div className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ea580c]" /> 40-54%</div>
-              <div className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#C47A1E]" /> 55-69%</div>
-              <div className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#22c55e]" /> 70-84%</div>
-              <div className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#1A7A4A]" /> 85%+</div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm">
+            <p className="text-sm font-semibold text-red-800">Confidence data could not be loaded</p>
+            <p className="text-xs text-red-600 mt-1">{error}</p>
+          </div>
+        )}
+
+        {!error && summary && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                {
+                  label: 'Overall Confidence',
+                  value: titleCase(summary.overallConfidence),
+                  sub: `${summary.byStage.length} tracked stages`,
+                  tone: confidenceTone(summary.overallConfidence),
+                },
+                {
+                  label: 'Evidence Items',
+                  value: String(summary.evidenceCount),
+                  sub: 'Linked to model entities',
+                  tone: 'bg-blue-50 text-blue-700 border-blue-200',
+                },
+                {
+                  label: 'Low Confidence Items',
+                  value: String(lowConfidenceCount),
+                  sub: 'Require evidence or review',
+                  tone: lowConfidenceCount > 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                },
+                {
+                  label: 'Data Quality Index',
+                  value: `${Math.round(dqi.overallDqi)}`,
+                  sub: 'Latest DQI composite',
+                  tone: confidenceTone(dqi.overallDqi),
+                },
+              ].map((card) => (
+                <div key={card.label} className={`rounded-xl border p-4 shadow-sm ${card.tone}`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">{card.label}</p>
+                  <p className="text-2xl font-extrabold mt-1">{card.value}</p>
+                  <p className="text-[11px] mt-1 opacity-80">{card.sub}</p>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-[#1B2A4A] text-white">
-                  <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider w-[120px]">Module</th>
-                  {markets.map(m => (
-                    <th key={m} className="px-3 py-3 text-center text-[10px] font-bold uppercase tracking-wider">{m}</th>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-4 h-4 text-[#1E5B9C]" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Confidence By Stage</h3>
+                </div>
+                <div className="space-y-3">
+                  {summary.byStage.length === 0 && (
+                    <p className="text-sm text-gray-400">No staged confidence summaries are available yet.</p>
+                  )}
+                  {summary.byStage.map((stage) => (
+                    <div key={stage.stage} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{titleCase(stage.stage)}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">{stage.count} tracked entities</p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${confidenceTone(stage.averageScore)}`}>
+                          {titleCase(stage.confidenceLevel)} · {Math.round(stage.averageScore)}
+                        </span>
+                      </div>
+                      <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-[#1E5B9C] rounded-full" style={{ width: `${Math.min(Math.max(stage.averageScore, 0), 100)}%` }} />
+                      </div>
+                    </div>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {modules.map((mod, mIdx) => (
-                  <tr key={mod} className={mIdx % 2 === 1 ? 'bg-gray-50/50' : ''}>
-                    <td className="px-4 py-2 text-xs font-bold text-gray-700 border-r border-gray-100">{mod}</td>
-                    {markets.map(market => {
-                      const score = heatmapData[mod][market];
-                      return (
-                        <td key={market} className="px-1 py-1 text-center">
-                          <div className={`mx-auto w-full max-w-[60px] py-2 rounded text-[11px] font-bold ${getConfidenceColor(score)}`}
-                            style={{ backgroundColor: getConfidenceBg(score) + '22', color: getConfidenceBg(score), borderLeft: `3px solid ${getConfidenceBg(score)}` }}
-                          >
-                            {score}%
-                          </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles className="w-4 h-4 text-[#1E5B9C]" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">DQI Factor Breakdown</h3>
+                </div>
+                <div className="space-y-3">
+                  {dqi.factors.length === 0 && (
+                    <p className="text-sm text-gray-400">No DQI factor scores have been recorded for this planning scope.</p>
+                  )}
+                  {dqi.factors.map((factor) => (
+                    <div key={factor.name}>
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="font-semibold text-gray-700">{titleCase(factor.name)}</span>
+                        <span className="font-bold text-gray-500">{Math.round(factor.score)}</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-[#1A7A4A] rounded-full" style={{ width: `${Math.min(Math.max(factor.score, 0), 100)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-[#1E5B9C]" />
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Low Confidence Watchlist</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#D6E4F7]">
+                      {['Entity', 'Confidence', 'Evidence', 'Last Updated', 'Entity ID'].map((header) => (
+                        <th key={header} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {summary.lowConfidenceItems.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                          No low-confidence items are currently open for this company.
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ═══════ EVIDENCE LOG & REVIEW SCHEDULE ═══════ */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#1E5B9C]" />
-              Evidence Log & Review Schedule
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-[#D6E4F7]">
-                  {['Module', 'Market', 'Confidence', 'Evidence / Gap', 'Reviewer', 'Review Date', 'Status', 'Priority'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {evidenceLog.map((entry, idx) => (
-                  <tr key={idx} className={`hover:bg-blue-50/30 transition ${idx % 2 === 1 ? 'bg-[#F4F5F7]' : ''}`}>
-                    <td className="px-4 py-2.5 font-semibold text-gray-700">{entry.module}</td>
-                    <td className="px-4 py-2.5 text-gray-600">{entry.market}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded font-bold text-[10px] ${
-                        entry.confidence >= 70 ? 'bg-green-100 text-green-700'
-                        : entry.confidence >= 50 ? 'bg-amber-100 text-amber-700'
-                        : 'bg-red-100 text-red-700'
-                      }`}>
-                        {entry.confidence}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-gray-600 max-w-[280px]">{entry.evidence}</td>
-                    <td className="px-4 py-2.5 text-gray-600">{entry.reviewer}</td>
-                    <td className="px-4 py-2.5 text-gray-500">{entry.reviewDate}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        entry.status === 'Flagged' ? 'bg-red-100 text-red-700' :
-                        entry.status === 'Under Review' ? 'bg-amber-100 text-amber-700' :
-                        entry.status === 'Pending' ? 'bg-blue-100 text-blue-700' :
-                        'bg-green-100 text-green-700'
-                      }`}>
-                        {entry.status === 'Flagged' ? <AlertTriangle className="w-3 h-3" /> :
-                         entry.status === 'Under Review' ? <Clock className="w-3 h-3" /> :
-                         <CheckCircle2 className="w-3 h-3" />}
-                        {entry.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        entry.priority === 'Critical' ? 'bg-red-600 text-white' :
-                        entry.priority === 'High' ? 'bg-amber-500 text-white' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {entry.priority}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Confidence Distribution Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {[
-            { label: 'High Confidence (85%+)', count: Object.values(heatmapData).reduce((acc, row) => acc + Object.values(row).filter(v => v >= 85).length, 0), color: 'border-l-4 border-l-[#1A7A4A]', bg: 'bg-green-50' },
-            { label: 'Medium (70-84%)', count: Object.values(heatmapData).reduce((acc, row) => acc + Object.values(row).filter(v => v >= 70 && v < 85).length, 0), color: 'border-l-4 border-l-[#22c55e]', bg: 'bg-emerald-50' },
-            { label: 'Low (55-69%)', count: Object.values(heatmapData).reduce((acc, row) => acc + Object.values(row).filter(v => v >= 55 && v < 70).length, 0), color: 'border-l-4 border-l-[#C47A1E]', bg: 'bg-amber-50' },
-            { label: 'Critical (<55%)', count: Object.values(heatmapData).reduce((acc, row) => acc + Object.values(row).filter(v => v < 55).length, 0), color: 'border-l-4 border-l-[#C0392B]', bg: 'bg-red-50' },
-          ].map(band => (
-            <div key={band.label} className={`${band.bg} ${band.color} rounded-lg p-4 border border-gray-200`}>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{band.label}</p>
-              <p className="text-2xl font-extrabold text-gray-900 mt-1">{band.count}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">assumptions</p>
+                      </tr>
+                    )}
+                    {summary.lowConfidenceItems.map((item, index) => (
+                      <tr key={item.assessmentId} className={index % 2 === 1 ? 'bg-[#F4F5F7]' : ''}>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{titleCase(item.entityType)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confidenceTone(item.confidenceLevel)}`}>
+                            {titleCase(item.confidenceLevel)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-700">{item.evidenceCount}</td>
+                        <td className="px-4 py-3 text-gray-600">{formatDate(item.updatedAt)}</td>
+                        <td className="px-4 py-3 font-mono text-[10px] text-gray-400">{item.entityId}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ))}
-        </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                  <Microscope className="w-4 h-4 text-[#1E5B9C]" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Evidence Log</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {evidence.length === 0 && (
+                    <div className="px-5 py-8 text-sm text-gray-400">No evidence items have been linked into this planning scope yet.</div>
+                  )}
+                  {evidence.map((item) => (
+                    <div key={item.evidenceId} className="px-5 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{item.title}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {titleCase(item.entityType)} · {titleCase(item.type)} · {formatDate(item.createdAt)}
+                          </p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confidenceTone(item.quality)}`}>
+                          {titleCase(item.quality)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 font-mono mt-2">{item.entityId}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-[#1E5B9C]" />
+                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Research Tasks</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {researchTasks.length === 0 && (
+                    <div className="px-5 py-8 text-sm text-gray-400">No open research backlog exists for this company yet.</div>
+                  )}
+                  {researchTasks.map((task) => (
+                    <div key={task.taskId} className="px-5 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{task.title}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {task.assignee} · {task.dueDate ? `Due ${formatDate(task.dueDate)}` : 'No due date'}
+                          </p>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confidenceTone(task.status)}`}>
+                          {titleCase(task.status)}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-2">
+                        Linked to {titleCase(task.entityType)} · {task.entityId}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 text-[11px] text-gray-500">
+                  {openTasks} active tasks across this planning scope.
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Confidence Rollups</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#1B2A4A] text-white">
+                      {['Scope', 'Aggregate Confidence', 'Weakest Link', 'Evidence Count', 'Entity ID'].map((header) => (
+                        <th key={header} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rollups.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                          No confidence rollups are available yet.
+                        </td>
+                      </tr>
+                    )}
+                    {rollups.map((item, index) => (
+                      <tr key={`${item.entityType}-${item.entityId}`} className={index % 2 === 1 ? 'bg-[#F4F5F7]' : ''}>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{titleCase(item.entityType)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confidenceTone(item.aggregateConfidence)}`}>
+                            {titleCase(item.aggregateConfidence)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-700">{Math.round(item.weakestLinkScore)}</td>
+                        <td className="px-4 py-3 font-mono text-gray-700">{item.evidenceCount}</td>
+                        <td className="px-4 py-3 font-mono text-[10px] text-gray-400">{item.entityId}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
