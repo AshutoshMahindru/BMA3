@@ -284,7 +284,7 @@ export default function SimulationLab() {
                    <Zap className="w-4 h-4 text-[#E67E22]" />
                    EBITDA Sensitivity Matrix (Price vs Volume)
                  </h4>
-                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Impact in AED '000s</span>
+                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Impact in AED &apos;000s</span>
               </div>
               <div className="overflow-x-auto">
                  <table className="w-full text-center">
