@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePlanningContext } from '@/lib/planning-context';
-import { ShieldAlert, AlertTriangle, CheckCircle2, MoreHorizontal, Info, Target, TrendingUp, Download, Printer } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, MoreHorizontal, Info, Target, TrendingUp, Download } from 'lucide-react';
 import DataFreshness from '@/components/data-freshness';
-import { fetchRiskScenarios } from '@/lib/api';
-import { useApiData } from '@/lib/use-api-data';
+import { getAnalysisRisk } from '@/lib/api-client';
+import type { DataSource } from '@/lib/data-source';
 import { exportCSV } from '@/lib/export';
 
 /* ── Types ── */
@@ -32,18 +32,87 @@ const FALLBACK_RISKS: RiskItem[] = [
   { risk_id: 'R4', name: 'Series A Funding Delay', category: 'Funding', mitigation_plan: 'Bridge debt', probability_pct: 0.20, financial_impact_estimate: 1200000, base_likelihood: 'low', base_impact: 'critical' },
 ];
 
+function normalizeRiskItem(item: unknown): RiskItem | null {
+  if (!item || typeof item !== 'object') return null;
+
+  const value = item as Record<string, unknown>;
+  const riskId = typeof value.risk_id === 'string' ? value.risk_id : '';
+  const name = typeof value.name === 'string' ? value.name : '';
+
+  if (!riskId || !name) {
+    return null;
+  }
+
+  return {
+    risk_id: riskId,
+    name,
+    category: typeof value.category === 'string' ? value.category : 'Unknown',
+    mitigation_plan: typeof value.mitigation_plan === 'string' ? value.mitigation_plan : 'Mitigation plan pending',
+    probability_pct: Number(value.probability_pct || 0),
+    financial_impact_estimate: Number(value.financial_impact_estimate || 0),
+    base_likelihood: typeof value.base_likelihood === 'string' ? value.base_likelihood : 'unknown',
+    base_impact: typeof value.base_impact === 'string' ? value.base_impact : 'unknown',
+    scenario_risk_id: typeof value.scenario_risk_id === 'string' ? value.scenario_risk_id : undefined,
+  };
+}
+
 export default function RiskDashboard() {
   const ctx = usePlanningContext();
-  const scenarioId = ctx.scenarioId || '';
+  const [risks, setRisks] = useState<RiskItem[]>(FALLBACK_RISKS);
+  const [source, setSource] = useState<DataSource>('loading');
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
-  const { data: risks, source, lastFetched } = useApiData<RiskItem[]>(
-    () => fetchRiskScenarios(scenarioId),
-    FALLBACK_RISKS,
-    [scenarioId]
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRiskRegister() {
+      if (!ctx.companyId) {
+        setRisks(FALLBACK_RISKS);
+        setSource('static');
+        setLastFetched(null);
+        return;
+      }
+
+      setSource('loading');
+      const result = await getAnalysisRisk({
+        companyId: ctx.companyId,
+        scenarioId: ctx.scenarioId || undefined,
+      });
+
+      if (cancelled) return;
+
+      const rawItems = Array.isArray(result.data?.riskItems) ? result.data.riskItems : [];
+      const normalizedItems = rawItems
+        .map(normalizeRiskItem)
+        .filter((item): item is RiskItem => item !== null);
+
+      if (normalizedItems.length > 0) {
+        setRisks(normalizedItems);
+        setSource('api');
+        setLastFetched(new Date());
+        return;
+      }
+
+      setRisks(FALLBACK_RISKS);
+      setSource('static');
+      setLastFetched(null);
+    }
+
+    loadRiskRegister().catch(() => {
+      if (cancelled) return;
+      setRisks(FALLBACK_RISKS);
+      setSource('static');
+      setLastFetched(null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.companyId, ctx.scenarioId]);
 
   const fmt = (val: number) => 
     new Intl.NumberFormat('en-AE', { maximumFractionDigits: 0 }).format(val);
+  const primaryRisk = risks[0] ?? FALLBACK_RISKS[0];
 
   /* ── Heatmap Calculation ── */
   const heatmapData = useMemo(() => {
@@ -226,7 +295,7 @@ export default function RiskDashboard() {
           <div className="bg-[#1B2A4A] rounded-xl p-6 text-white shadow-lg relative overflow-hidden">
              <ShieldAlert className="absolute top-[-10px] right-[-10px] w-24 h-24 text-white/5" />
              <h4 className="text-xs font-bold uppercase tracking-widest text-[#4A90E2] mb-1">Impact Summary</h4>
-             <p className="text-2xl font-bold">AED {fmt(risks.reduce((a, b) => a + (b.probability_pct * b.financial_impact_estimate), 0))}K</p>
+             <p className="text-2xl font-bold">AED {fmt(risks.reduce((a, b) => a + (b.probability_pct * b.financial_impact_estimate), 0))}</p>
              <p className="text-[10px] text-white/60 mt-1 uppercase font-bold tracking-tight">Probabilistic Value at Risk (VaR)</p>
              
              <div className="mt-8 space-y-4">
@@ -235,8 +304,8 @@ export default function RiskDashboard() {
                       <span className="text-[10px] font-bold uppercase text-[#4A90E2]">Primary Threat</span>
                       <span className="text-[10px] font-bold bg-red-500/20 text-red-300 px-2 py-0.5 rounded">High Probability</span>
                    </div>
-                   <p className="text-xs font-bold leading-relaxed">{risks[0].name}</p>
-                   <p className="text-[9px] text-white/50 mt-1">Impact estimated at AED {fmt(risks[0].financial_impact_estimate)}K</p>
+                   <p className="text-xs font-bold leading-relaxed">{primaryRisk.name}</p>
+                   <p className="text-[9px] text-white/50 mt-1">Impact estimated at AED {fmt(primaryRisk.financial_impact_estimate)}</p>
                 </div>
                 
                 <div className="bg-white/10 rounded-lg p-4 border border-white/10 hover:bg-white/15 transition cursor-pointer">

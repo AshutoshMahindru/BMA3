@@ -7,15 +7,9 @@ import contextRouter from './routes/v1/context';
 import assumptionsRouter from './routes/v1/assumptions';
 import financialsRouter from './routes/v1/financials';
 import computeRouter from './routes/v1/compute';
+import analysisRouter from './routes/v1/analysis';
 
 dotenv.config();
-
-if (process.env.ENABLE_LEGACY_QUEUE === 'true') {
-  // Keep the queue worker opt-in during pre-refactor stabilization so local
-  // and CI boots are deterministic even when Redis is unavailable.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require('./jobs');
-}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -30,6 +24,7 @@ app.use('/api/v1/context', contextRouter);
 app.use('/api/v1/assumptions', assumptionsRouter);
 app.use('/api/v1/financials', financialsRouter);
 app.use('/api/v1/compute', computeRouter);
+app.use('/api/v1/analysis', analysisRouter);
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {

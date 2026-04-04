@@ -10,12 +10,11 @@
     "smoke:canonical": "tsx scripts/smoke-canonical-runtime.ts"
   },
   "dependencies": {
-    "bullmq": "^5.71.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "ioredis": "^5.10.1",
     "pg": "^8.11.5",
+    "uuid": "^13.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

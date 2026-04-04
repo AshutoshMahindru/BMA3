@@ -137,22 +137,5 @@ export const triggerCompute = (payload: {
 export const pollJob = (jobId: string) =>
   fetchAPI(`/financial-projections/jobs/${jobId}`);
 
-export const fetchRiskScenarios = (scenarioId: string) =>
-  fetchAPI(`/risk-scenarios?scenario_id=${scenarioId}`);
-
-export const triggerSimulation = (payload: {
-  scenario_id: string;
-  simulator_type: string;
-  iterations?: number;
-  input_params?: any;
-}) =>
-  fetchAPI('/simulation-runs', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-export const fetchSimulationResults = (runId: string) =>
-  fetchAPI(`/simulation-runs/${runId}/results`);
-
 export const checkHealth = () =>
   fetchAPI<{ status: string; message: string }>('/health');
