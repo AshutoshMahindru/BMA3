@@ -7,7 +7,7 @@
 |---|---|---|
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
 | `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
-| Test count | 117 | **119** (+2 contract/integration tests on top of earlier route coverage) |
+| Test count | 117 | **123** (+6 contract/integration tests on top of earlier route coverage) |
 | Playwright dashboard smoke | **3/3** | **7/7** (scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, wizard) |
 | AI SME overlays | Missing | **Implemented** — advisory overlays live in `executive/page.tsx` and `pnl/page.tsx` |
 | Compliant code routes | 107 | **114** |
@@ -20,7 +20,7 @@
 |---|---|
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
-| Jest suite | **119/119 passing** |
+| Jest suite | **123/123 passing** |
 | Playwright E2E | **7/7 passing** |
 | Wave status | Wave 5 **DONE** — compose-hosted runtime verified |
 
@@ -44,7 +44,7 @@
 | `reference.ts` | 8 | 8 | 0 ✅ new |
 | `ai.ts` | 4 | 4 | 0 ✅ new |
 
-Route-count parity is complete, but one behavioral caveat remains inside the assumptions surface: `/packs`, `/packs/:packId/apply`, `/overrides`, and the family write flows in [api/src/routes/v1/assumptions.ts](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/api/src/routes/v1/assumptions.ts) are still partially placeholder-backed even though the contract paths are present.
+Route-count and core route behavior are now aligned across the assumptions surface: sets, packs, pack apply, family reads/writes, and overrides all persist against the canonical assumption-pack tables in [api/src/routes/v1/assumptions.ts](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/api/src/routes/v1/assumptions.ts).
 
 ---
 
@@ -117,5 +117,4 @@ The real orchestrator runs in the integration suite, and the live async queue pa
 
 | # | Gap | Effort |
 |---|---|---|
-| 1 | Assumptions API behavior completion (`/packs`, `/packs/:packId/apply`, `/overrides`, and family writes) | Medium |
-| 2 | Financial reconciliation cleanup for the seeded base scenario (negative PPE / balance-sheet imbalance warnings still appear during steps 11 and 16) | Medium |
+| 1 | Financial reconciliation cleanup for the seeded base scenario (negative PPE / balance-sheet imbalance warnings still appear during steps 11 and 16) | Medium |
