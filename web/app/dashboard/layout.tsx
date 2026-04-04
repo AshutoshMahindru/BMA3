@@ -10,8 +10,6 @@ import {
 } from 'lucide-react';
 import {
   PlanningContextProvider, usePlanningContext,
-  scopeLabels, timePeriodLabels, scenarioLabels,
-  type Scope, type TimePeriod, type ScenarioKey,
 } from '@/lib/planning-context';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -67,28 +65,8 @@ const navGroups = [
   },
 ];
 
-/* ── Sidebar scenario pill config ─────────────────────────────────────── */
-const scenarioPills: { id: ScenarioKey; label: string; color: string }[] = [
-  { id: 'base',   label: 'Base Case',   color: 'bg-blue-600' },
-  { id: 'bull',   label: 'Bull Case',   color: 'bg-green-600' },
-  { id: 'bear',   label: 'Bear Case',   color: 'bg-amber-600' },
-  { id: 'stress', label: 'Stress Test', color: 'bg-red-600' },
-];
-
-const scopeOptions: { value: Scope; label: string }[] = [
-  { value: 'portfolio', label: 'UAE Portfolio' },
-  { value: 'dubai',     label: 'Dubai > All' },
-  { value: 'jlt',       label: 'Dubai > JLT Cluster' },
-  { value: 'jlt-north', label: 'Dubai > JLT North' },
-  { value: 'uae',       label: 'Abu Dhabi' },
-];
-
-const timeOptions: { value: TimePeriod; label: string }[] = [
-  { value: 'annual',     label: '2025 Annual' },
-  { value: 'quarterly',  label: '2025 Q1-Q4' },
-  { value: 'monthly',    label: 'Monthly View' },
-  { value: 'multi-year', label: '2025-2027 (3 Year)' },
-];
+/* ── Scenario pill colors (cycled by index) ───────────────────────────── */
+const scenarioColors = ['bg-blue-600', 'bg-green-600', 'bg-amber-600', 'bg-red-600', 'bg-purple-600'];
 
 /* ═══════════════════════════════════════════════════════════════════════
    INNER LAYOUT — reads from PlanningContext
@@ -184,7 +162,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="flex items-center gap-1.5 bg-gray-50 rounded px-2.5 py-1 border border-gray-200">
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Period:</span>
-                  <span className="text-[11px] font-semibold text-gray-700">{ctx.timePeriodLabel}</span>
+                  <span className="text-[11px] font-semibold text-gray-700">{ctx.periodLabel}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-gray-50 rounded px-2.5 py-1 border border-gray-200">
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Scope:</span>
@@ -212,16 +190,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <PanelLeftClose className="w-4 h-4" />
               </button>
 
-              {/* Scope */}
+              {/* Company */}
               <div>
-                <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Scope</h4>
+                <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Company</h4>
                 <select
-                  value={ctx.scope}
-                  onChange={e => ctx.setScope(e.target.value as Scope)}
+                  value={ctx.companyId || ''}
+                  onChange={e => ctx.setCompanyId(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-700 rounded-md px-2.5 py-2 cursor-pointer hover:bg-white transition"
                 >
-                  {scopeOptions.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                  {ctx.companies.map((c: any) => (
+                    <option key={c.companyId} value={c.companyId}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -230,12 +208,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <div>
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Time Period</h4>
                 <select
-                  value={ctx.periodLabel}
-                  onChange={e => ctx.setPeriodRange(e.target.value, e.target.value)}
+                  value={ctx.periodStart || ''}
+                  onChange={e => {
+                    const p = ctx.periods.find((pp: any) => pp.periodId === e.target.value);
+                    if (p) ctx.setPeriodRange(p.periodId, p.periodId);
+                  }}
                   className="w-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-700 rounded-md px-2.5 py-2 cursor-pointer hover:bg-white transition"
                 >
-                  {timeOptions.map(o => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
+                  {ctx.periods.map((p: any) => (
+                    <option key={p.periodId} value={p.periodId}>{p.label}</option>
                   ))}
                 </select>
               </div>
@@ -244,15 +225,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <div>
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Scenario</h4>
                 <div className="space-y-1.5">
-                  {scenarioPills.map(s => (
-                    <button key={s.id} onClick={() => ctx.setScenarioId(s.id)}
+                  {ctx.scenarios.map((s: any, i: number) => (
+                    <button key={s.scenarioId} onClick={() => ctx.setScenarioId(s.scenarioId)}
                       className={`w-full text-left text-xs font-medium px-3 py-2 rounded-md transition ${
-                        ctx.scenarioId === s.id
-                          ? `${s.color} text-white shadow-sm`
+                        ctx.scenarioId === s.scenarioId
+                          ? `${scenarioColors[i % scenarioColors.length]} text-white shadow-sm`
                           : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                       }`}
                     >
-                      {s.label}
+                      {s.name}
                     </button>
                   ))}
                 </div>

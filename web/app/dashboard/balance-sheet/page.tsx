@@ -39,7 +39,7 @@ export default function BalanceSheetConsole() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.companyName} — {ctx.scenarioName} — Dec 2024 vs Dec 2025F
-            <DataFreshness source={source} lastFetched={lastFetched} />
+            <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
           </p>
         </div>
         <div className="flex items-center gap-2">

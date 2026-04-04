@@ -111,7 +111,7 @@ export default function SimulationLab() {
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
               Probabilistic Modeling — {ctx.scenarioName}
-              <DataFreshness source={source} lastFetched={lastFetched} />
+              <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
             </p>
           </div>
           <div className="flex items-center gap-2">

@@ -643,7 +643,6 @@ export default function AssumptionsManager() {
         if (pollData.status === 'COMPLETED') {
           clearInterval(poll);
           setJobProgress(100);
-          ctx.markComputed();
           setTimeout(() => router.push('/dashboard/pnl'), 800);
         } else if (pollData.progress_pct) {
           setJobProgress(Math.max(30, pollData.progress_pct));
@@ -664,7 +663,6 @@ export default function AssumptionsManager() {
           clearInterval(sim);
           setTimeout(() => {
             setIsComputing(false);
-            ctx.markComputed();
             router.push('/dashboard/pnl');
           }, 600);
         }

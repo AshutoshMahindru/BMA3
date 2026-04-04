@@ -40,8 +40,8 @@ export default function CashflowConsole() {
             Cash Flow Projection Console
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.companyName} — {ctx.scenarioName} — {ctx.timePeriodLabel}
-            <DataFreshness source={source} lastFetched={lastFetched} />
+            {ctx.companyName} — {ctx.scenarioName} — {ctx.periodLabel}
+            <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -112,7 +112,7 @@ export default function ExecutiveCockpit() {
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Executive Planning Cockpit</h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.companyName} — {ctx.periodLabel} — {ctx.scenarioName}
-            <DataFreshness source={loading ? 'loading' : error ? 'error' : 'api'} lastFetched={lastFetched} />
+            <DataFreshness source={loading ? 'loading' : error ? 'static' : 'api'} lastFetched={lastFetched ? new Date(lastFetched) : null} />
           </p>
         </div>
         <div className="flex items-center gap-2">

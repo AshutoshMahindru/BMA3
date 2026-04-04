@@ -44,7 +44,7 @@ export default function UnitEconomicsConsole() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
             {ctx.companyName} — {ctx.scenarioName} — Per-Order Breakdown
-            <DataFreshness source={source} lastFetched={lastFetched} />
+            <DataFreshness source={source} lastFetched={lastFetched ? new Date(lastFetched) : null} />
           </p>
         </div>
         <div className="flex items-center gap-2">
