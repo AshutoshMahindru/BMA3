@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { logger } from './lib/logger';
 
 // ── SpecOS-aligned routes (canonical namespace) ──
 import contextRouter from './routes/v1/context';
@@ -41,7 +42,23 @@ app.get('/api/v1/health', (_req, res) => {
 
 // Standard Error Envelope
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err.stack);
+  const traceIdHeader = req.headers['x-trace-id'];
+  const requestIdHeader = req.headers['x-request-id'];
+  const traceId = Array.isArray(traceIdHeader) ? traceIdHeader[0] : traceIdHeader;
+  const requestId = Array.isArray(requestIdHeader) ? requestIdHeader[0] : requestIdHeader;
+
+  logger.error(
+    {
+      err,
+      stack: err?.stack,
+      method: req.method,
+      url: req.originalUrl || req.url,
+      requestId,
+      traceId,
+    },
+    'Unhandled API error'
+  );
+
   res.status(err.status || 500).json({
     error: {
       code: err.code || 'INTERNAL_SERVER_ERROR',
@@ -52,5 +69,5 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
 });
 
 app.listen(PORT, () => {
-  console.log(`BMA3 API Server running on port ${PORT}`);
+  logger.info({ port: PORT }, 'BMA3 API Server running');
 });
