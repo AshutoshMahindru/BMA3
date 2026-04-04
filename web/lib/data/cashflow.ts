@@ -7,6 +7,12 @@ export type CFRow = {
   indent?: boolean;
   isHeader?: boolean;
   isBold?: boolean;
+  q1: number;
+  q2: number;
+  q3: number;
+  q4: number;
+  fy: number;
+  highlight?: boolean;
 };
 export const CASHFLOW_KPIS: any = {};
 export const CF_QUARTERLY_DATA: any[] = [];

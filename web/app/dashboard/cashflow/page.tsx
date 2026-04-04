@@ -54,7 +54,7 @@ export default function CashflowConsole() {
 
         {/* KPI Strip */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {kpis.map(kpi => (
+          {kpis.map((kpi: any) => (
             <div key={kpi.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:border-[#1B2A4A]/20 transition">
               <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">{kpi.label}</p>
               <p className="text-lg font-extrabold text-gray-900">{kpi.value}</p>

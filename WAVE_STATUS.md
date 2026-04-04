@@ -4,13 +4,13 @@
 > Read by agents to know what's done, what's in progress, and what's next.
 > For artifact → code-file mapping, see `CODEGEN.md`.
 
-## Current Wave: 0 (Pre-Migration)
+## Current Wave: 1 (Foundation) — COMPLETE
 
 ## Wave Status
 
 | Wave | Status | Sessions | Risk | Gate | Compliance |
 |---|---|---|---|---|---|
-| 1. Foundation | NOT_STARTED | 1-2 | Low | `tsc --noEmit` passes, schemas validate against seed | 3/9 → 5/9 |
+| 1. Foundation | **DONE** | 1 | Low | `tsc --noEmit` passes both api/ and web/ | 3/9 → 5/9 |
 | 2. First Slice | NOT_STARTED | 3-5 | **High** | Golden fixture passes, P&L page shows live data | → 7/9 |
 | 3. Compute | NOT_STARTED | 2-3 | Medium | Full 18-step DAG runs, both fixtures pass | → 8/9 |
 | 4. Rewire | NOT_STARTED | 2-3 | Low | All pages live, no static fallback, no string IDs | → 9/9 |
@@ -31,14 +31,14 @@
 ### Wave 1: Foundation (types + schemas + validation + API client)
 | Target | Status | Generated From |
 |---|---|---|
-| `api/src/types/entities.ts` | NOT_STARTED | `canonical_schema.json` |
-| `api/src/types/enums.ts` | NOT_STARTED | `canonical_schema.json` enum_types |
-| `api/src/types/api.ts` | NOT_STARTED | `api_contracts.json` |
-| `api/src/schemas/*.ts` | NOT_STARTED | `canonical_schema.json` |
-| `api/src/middleware/validate.ts` | NOT_STARTED | Zod integration |
-| `web/lib/api-client.ts` | NOT_STARTED | `api_contracts.json` |
-| `web/lib/types/*.ts` | NOT_STARTED | `api_contracts.json` |
-| `db/migrations/001-reconcile.sql` | NOT_STARTED | Diff 01-schema.sql vs ddl.sql |
+| `api/src/types/entities.ts` | **DONE** | `canonical_schema.json` — 50 entities, 1033 lines |
+| `api/src/types/enums.ts` | **DONE** | `canonical_schema.json` enum_types — 16 enums, 161 lines |
+| `api/src/types/api.ts` | **DONE** | `api_contracts.json` — 247 interfaces, 2520 lines |
+| `api/src/schemas/*.ts` | **DONE** | `canonical_schema.json` — 51 files (50 entities + index) |
+| `api/src/middleware/validate.ts` | **DONE** | Zod validation middleware — validate body, query, params |
+| `web/lib/api-client.ts` | **DONE** | `api_contracts.json` — 128 typed functions, 620 lines |
+| `web/lib/types/api.ts` | **DONE** | `api_contracts.json` — 157 frontend types, 1628 lines |
+| `db/migrations/001-reconcile-with-specos.sql` | **DONE** | Diff 01-schema.sql vs ddl.sql — 32 new tables, 98 columns, 83 FKs, 88 indexes |
 
 ### Wave 2: First Vertical Slice (planning → compute → P&L)
 | Target | Status | Generated From |
@@ -95,3 +95,4 @@
 | Session | Date | Wave | What Was Done | Compliance After |
 |---|---|---|---|---|
 | 0 | 2026-04-04 | setup | Scaffolding: submodule, AGENTS.md, CODEGEN.md, compliance checker | 3 pass, 7 warn, 16 fail |
+| 1 | 2026-04-04 | Wave 1 | Generated: 50 entity interfaces, 16 enums, 51 Zod schema files, 247 API types, 128-function typed API client, validation middleware, schema reconciliation migration (2247 lines). Fixed: seed Unicode, stub types, lint. Gate: tsc --noEmit passes both api/ and web/. | 3 pass, 8 warn, 16 fail |
