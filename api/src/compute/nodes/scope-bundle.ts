@@ -12,6 +12,7 @@
 
 import { db } from '../../db';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeScopeBundle(
   ctx: ComputeContext,
@@ -23,7 +24,7 @@ export async function executeScopeBundle(
 
   // ── Step 1: Load scope bundle for this scenario ─────────────────────────
   const bundleResult = await db.query(
-    `SELECT sb.id, sb.bundle_name, sb.status, sb.is_default
+    `SELECT sb.id, sb.name, sb.status, sb.is_default
      FROM scope_bundles sb
      WHERE sb.company_id = $1
        AND sb.scenario_id = $2
@@ -43,92 +44,99 @@ export async function executeScopeBundle(
   const scopeBundle = bundleResult.rows[0];
 
   // ── Step 2: Validate format selections against format_taxonomy_nodes ────
+  // DDL: taxonomy_bindings(binding_id, source_entity_type, source_entity_id,
+  //   taxonomy_family, node_id, binding_role, created_at)
   const formatsResult = await db.query(
-    `SELECT DISTINCT tn.id, tn.name
+    `SELECT DISTINCT tn.node_id, tn.label
      FROM taxonomy_bindings tb
-     JOIN format_taxonomy_nodes tn ON tn.id = tb.taxonomy_node_id
-     WHERE tb.scope_bundle_id = $1
-       AND tb.taxonomy_type = 'format'
+     JOIN format_taxonomy_nodes tn ON tn.node_id = tb.node_id
+     WHERE tb.source_entity_type = 'scope_bundle'
+       AND tb.source_entity_id = $1
+       AND tb.taxonomy_family = 'format'
        AND tn.status = 'active'`,
     [scopeBundle.id]
   );
 
-  const formats = formatsResult.rows.map((r: any) => r.id);
+  const formats = formatsResult.rows.map((r: any) => r.node_id);
   if (formats.length === 0) {
-    // Try loading from scope_bundle_members as fallback
+    // Try loading from scope_bundle_items as fallback
+    // DDL: scope_bundle_items(id, scope_bundle_id, dimension_family, node_type, node_id, ...)
     const fallbackFormats = await db.query(
-      `SELECT DISTINCT dimension_value
-       FROM scope_bundle_members
-       WHERE scope_bundle_id = $1 AND dimension_type = 'format'`,
+      `SELECT DISTINCT node_id
+       FROM scope_bundle_items
+       WHERE scope_bundle_id = $1 AND dimension_family = 'format'`,
       [scopeBundle.id]
     );
-    formats.push(...fallbackFormats.rows.map((r: any) => r.dimension_value));
+    formats.push(...fallbackFormats.rows.map((r: any) => r.node_id));
   }
 
   // ── Step 3: Validate category/portfolio selections ──────────────────────
   const categoriesResult = await db.query(
-    `SELECT DISTINCT tn.id, tn.name
+    `SELECT DISTINCT tn.node_id, tn.label
      FROM taxonomy_bindings tb
-     JOIN category_taxonomy_nodes tn ON tn.id = tb.taxonomy_node_id
-     WHERE tb.scope_bundle_id = $1
-       AND tb.taxonomy_type = 'category'
+     JOIN category_taxonomy_nodes tn ON tn.node_id = tb.node_id
+     WHERE tb.source_entity_type = 'scope_bundle'
+       AND tb.source_entity_id = $1
+       AND tb.taxonomy_family = 'category'
        AND tn.status = 'active'`,
     [scopeBundle.id]
   );
 
-  const categories = categoriesResult.rows.map((r: any) => r.id);
+  const categories = categoriesResult.rows.map((r: any) => r.node_id);
   if (categories.length === 0) {
     const fallbackCats = await db.query(
-      `SELECT DISTINCT dimension_value
-       FROM scope_bundle_members
-       WHERE scope_bundle_id = $1 AND dimension_type = 'category'`,
+      `SELECT DISTINCT node_id
+       FROM scope_bundle_items
+       WHERE scope_bundle_id = $1 AND dimension_family = 'category'`,
       [scopeBundle.id]
     );
-    categories.push(...fallbackCats.rows.map((r: any) => r.dimension_value));
+    categories.push(...fallbackCats.rows.map((r: any) => r.node_id));
   }
 
   // ── Step 4: Validate channel selections ─────────────────────────────────
   const channelsResult = await db.query(
-    `SELECT DISTINCT tn.id, tn.name
+    `SELECT DISTINCT tn.node_id, tn.label
      FROM taxonomy_bindings tb
-     JOIN channel_taxonomy_nodes tn ON tn.id = tb.taxonomy_node_id
-     WHERE tb.scope_bundle_id = $1
-       AND tb.taxonomy_type = 'channel'
+     JOIN channel_taxonomy_nodes tn ON tn.node_id = tb.node_id
+     WHERE tb.source_entity_type = 'scope_bundle'
+       AND tb.source_entity_id = $1
+       AND tb.taxonomy_family = 'channel'
        AND tn.status = 'active'`,
     [scopeBundle.id]
   );
 
-  const channels = channelsResult.rows.map((r: any) => r.id);
+  const channels = channelsResult.rows.map((r: any) => r.node_id);
   if (channels.length === 0) {
     const fallbackChannels = await db.query(
-      `SELECT DISTINCT dimension_value
-       FROM scope_bundle_members
-       WHERE scope_bundle_id = $1 AND dimension_type = 'channel'`,
+      `SELECT DISTINCT node_id
+       FROM scope_bundle_items
+       WHERE scope_bundle_id = $1 AND dimension_family = 'channel'`,
       [scopeBundle.id]
     );
-    channels.push(...fallbackChannels.rows.map((r: any) => r.dimension_value));
+    channels.push(...fallbackChannels.rows.map((r: any) => r.node_id));
   }
 
   // ── Step 5: Validate geography selections ───────────────────────────────
   const geographiesResult = await db.query(
-    `SELECT DISTINCT tn.id, tn.name
+    `SELECT DISTINCT tn.node_id, tn.label
      FROM taxonomy_bindings tb
-     JOIN geography_taxonomy_nodes tn ON tn.id = tb.taxonomy_node_id
-     WHERE tb.scope_bundle_id = $1
-       AND tb.taxonomy_type = 'geography'
+     JOIN geography_nodes tn ON tn.node_id = tb.node_id
+     WHERE tb.source_entity_type = 'scope_bundle'
+       AND tb.source_entity_id = $1
+       AND tb.taxonomy_family = 'geography'
        AND tn.status = 'active'`,
     [scopeBundle.id]
   );
 
-  const geographies = geographiesResult.rows.map((r: any) => r.id);
+  const geographies = geographiesResult.rows.map((r: any) => r.node_id);
   if (geographies.length === 0) {
     const fallbackGeos = await db.query(
-      `SELECT DISTINCT dimension_value
-       FROM scope_bundle_members
-       WHERE scope_bundle_id = $1 AND dimension_type = 'geography'`,
+      `SELECT DISTINCT node_id
+       FROM scope_bundle_items
+       WHERE scope_bundle_id = $1 AND dimension_family = 'geography'`,
       [scopeBundle.id]
     );
-    geographies.push(...fallbackGeos.rows.map((r: any) => r.dimension_value));
+    geographies.push(...fallbackGeos.rows.map((r: any) => r.node_id));
   }
 
   // ── Step 6: Check all dimensional combinations are valid ────────────────
@@ -138,9 +146,9 @@ export async function executeScopeBundle(
   // Validate that scope is not completely empty
   const totalSelections = formats.length + categories.length + channels.length + geographies.length;
   if (totalSelections === 0) {
-    console.warn(
-      `[scope-bundle] Scope bundle ${scopeBundle.id} has no taxonomy bindings. ` +
-      `Proceeding with company-level scope.`
+    logger.warn(
+      { scopeBundleId: scopeBundle.id },
+      'Scope bundle has no taxonomy bindings, proceeding with company-level scope'
     );
   }
 
@@ -153,9 +161,14 @@ export async function executeScopeBundle(
     channels,
   };
 
-  console.log(
-    `[scope-bundle] Resolved bundle '${scopeBundle.bundle_name}': ` +
-    `${geographies.length} geographies, ${formats.length} formats, ` +
-    `${categories.length} categories, ${channels.length} channels`
+  logger.info(
+    {
+      bundle_name: scopeBundle.name,
+      geographies_count: geographies.length,
+      formats_count: formats.length,
+      categories_count: categories.length,
+      channels_count: channels.length,
+    },
+    'Scope bundle resolved'
   );
 }

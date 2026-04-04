@@ -12,6 +12,7 @@
 
 import { db } from '../../db';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 // ── ResolvedAssumptions class ─────────────────────────────────────────────────
 
@@ -160,14 +161,16 @@ export async function executeAssumptionPacks(
 
   // ── Step 1: Load assumption packs bound to active decision state ────────
   // First, find the assumption set / packs for this scenario
+  // DDL: assumption_packs has columns: id, company_id, assumption_set_id, family, name, status, ...
+  // No scenario_id column — packs are linked to scenarios via assumption_sets or scope_bundles.
+  // We filter by company_id and status; scenario binding is through the assumption_set.
   const packsResult = await db.query(
-    `SELECT ap.id AS pack_id, ap.pack_name, ap.assumption_family, ap.status
+    `SELECT ap.id AS pack_id, ap.name, ap.family, ap.status
      FROM assumption_packs ap
      WHERE ap.company_id = $1
-       AND ap.scenario_id = $2
        AND ap.status = 'active'
-     ORDER BY ap.assumption_family, ap.created_at DESC`,
-    [ctx.company_id, ctx.scenario_id]
+     ORDER BY ap.family, ap.created_at DESC`,
+    [ctx.company_id]
   );
 
   const packIds = packsResult.rows.map((r: any) => r.pack_id);
@@ -175,9 +178,11 @@ export async function executeAssumptionPacks(
   // If a specific assumption_set_id was provided, also include its bindings
   if (ctx.assumption_set_id) {
     const setBindingsResult = await db.query(
-      `SELECT ap.id AS pack_id
+      `SELECT DISTINCT ap.id AS pack_id
        FROM assumption_packs ap
-       WHERE ap.id = $1 OR ap.assumption_set_id = $1`,
+       JOIN assumption_pack_bindings apb ON ap.id = apb.pack_id
+       WHERE apb.assumption_set_id = $1
+         AND ap.status = 'active'`,
       [ctx.assumption_set_id]
     );
     for (const row of setBindingsResult.rows) {
@@ -199,7 +204,6 @@ export async function executeAssumptionPacks(
               afb.value,
               afb.unit,
               afb.is_override,
-              afb.inherited_from_id,
               afb.pack_id
        FROM assumption_field_bindings afb
        WHERE afb.pack_id = ANY($1)
@@ -214,14 +218,13 @@ export async function executeAssumptionPacks(
               afb.value,
               afb.unit,
               afb.is_override,
-              afb.inherited_from_id,
               afb.pack_id
        FROM assumption_field_bindings afb
        JOIN assumption_packs ap ON ap.id = afb.pack_id
        WHERE ap.company_id = $1
-         AND (ap.scenario_id = $2 OR ap.scenario_id IS NULL)
+         AND ap.status = 'active'
        ORDER BY afb.is_override DESC, afb.created_at DESC`,
-      [ctx.company_id, ctx.scenario_id]
+      [ctx.company_id]
     );
   }
 
@@ -232,18 +235,12 @@ export async function executeAssumptionPacks(
   for (const binding of bindingsResult.rows) {
     const varName = binding.variable_name;
 
-    // Extract numeric value from the binding
+    // DDL: value column is NUMERIC — comes back as number or string from pg.
     let numericValue = 0;
     if (binding.value !== null && binding.value !== undefined) {
-      if (typeof binding.value === 'object' && binding.value.numeric !== undefined) {
-        numericValue = parseFloat(binding.value.numeric);
-      } else if (typeof binding.value === 'object' && binding.value.value !== undefined) {
-        numericValue = parseFloat(binding.value.value);
-      } else if (typeof binding.value === 'number') {
-        numericValue = binding.value;
-      } else {
-        numericValue = parseFloat(String(binding.value));
-      }
+      numericValue = typeof binding.value === 'number'
+        ? binding.value
+        : parseFloat(String(binding.value));
     }
 
     if (isNaN(numericValue)) {
@@ -340,17 +337,25 @@ export async function executeAssumptionPacks(
 
   // ── Step 10: Emit resolved assumption snapshot ──────────────────────────
   if (assumptions.warnings.length > 0) {
-    console.warn(
-      `[assumption-packs] ${assumptions.warnings.length} warnings:\n` +
-      assumptions.warnings.map((w) => `  - ${w.variable}: ${w.message}`).join('\n')
+    logger.warn(
+      {
+        module: 'assumption-packs',
+        count: assumptions.warnings.length,
+        warnings: assumptions.warnings,
+      },
+      'assumption-packs %d warnings',
+      assumptions.warnings.length
     );
   }
 
   state.assumptions = assumptions;
 
-  console.log(
-    `[assumption-packs] Resolved ${assumptions.getLoadedVariables().length} variables ` +
-    `from ${packIds.length} packs. ` +
-    `Warnings: ${assumptions.warnings.length}`
+  logger.info(
+    {
+      loadedVariables: assumptions.getLoadedVariables().length,
+      packCount: packIds.length,
+      warnings: assumptions.warnings.length,
+    },
+    'assumption-packs resolved'
   );
 }
