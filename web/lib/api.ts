@@ -1,8 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   API DATA LAYER — Try-first, fallback-silently pattern
-   - Attempts to fetch from the Express backend on localhost:4000
-   - If the server is offline or returns an error, returns null
-   - Callers use: const data = await fetchAPI('/pnl') ?? fallbackData;
+   LEGACY API DATA LAYER — fallback-first helper for non-core screens only.
+   Core finance views should use web/lib/api-client.ts so they are wired to
+   canonical contracts instead of silent fallback behavior.
    ══════════════════════════════════════════════════════════════════════ */
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -58,20 +57,8 @@ export const fetchScenarios = (companyId?: string) =>
 export const fetchDemandDrivers = (scenarioId: string) =>
   fetchAPI(`/demand-drivers?scenario_id=${scenarioId}`);
 
-export const fetchPnl = (scenarioId?: string) =>
-  fetchAPI(`/financial-projections/pnl${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
-export const fetchBalanceSheet = (scenarioId?: string) =>
-  fetchAPI(`/financial-projections/balance-sheet${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
-export const fetchCashflow = (scenarioId?: string) =>
-  fetchAPI(`/financial-projections/cashflow${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
-
 export const fetchKpiProjections = () =>
   fetchAPI('/kpi-projections');
-
-export const fetchUnitEconomics = (scenarioId?: string) =>
-  fetchAPI(`/unit-economics${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
 
 export const fetchCapexPlans = (scenarioId?: string) =>
   fetchAPI(`/capex-plans${scenarioId ? `?scenario_id=${scenarioId}` : ''}`);
