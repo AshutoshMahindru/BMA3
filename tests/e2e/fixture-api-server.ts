@@ -76,6 +76,40 @@ type ComputeRunStepRecord = {
   output_summary: Record<string, unknown>;
 };
 
+type AssumptionPackRecord = {
+  id: string;
+  company_id: string;
+  assumption_set_id: string;
+  family: string;
+  assumption_family: string;
+  pack_name: string;
+  name: string;
+  status: string;
+  is_deleted: boolean;
+  metadata: Record<string, unknown>;
+};
+
+type AssumptionPackBindingRecord = {
+  id: string;
+  pack_id: string;
+  assumption_set_id: string;
+  scope_bundle_id: string | null;
+};
+
+type AssumptionBindingRecord = {
+  id: string;
+  company_id: string;
+  assumption_set_id: string;
+  pack_id: string;
+  variable_name: string;
+  current_value: number;
+  unit: string;
+  evidence_ref: string;
+  family: string;
+  pack_name: string;
+  grain_signature: Record<string, unknown>;
+};
+
 const tenantId = '10000000-0000-4000-8000-000000000001';
 const companyId = '10000000-0000-4000-8000-000000000111';
 const calendarId = '10000000-0000-4000-8000-000000000211';
@@ -297,13 +331,162 @@ const confidenceRollups = [
   { company_id: companyId, rollup_scope: 'operating_model', avg_score: 83, assessment_count: 3, critical_floor: 69 },
 ];
 
-const assumptionBindingRows = [
-  { id: '77000000-0000-4000-8000-000000000111', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'average_order_value', current_value: 64, unit: 'currency', evidence_ref: 'market_research', family: 'demand', pack_name: 'Demand Core' },
-  { id: '77000000-0000-4000-8000-000000000112', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'conversion_rate', current_value: 0.24, unit: 'ratio', evidence_ref: 'historical_data', family: 'demand', pack_name: 'Demand Core' },
-  { id: '77000000-0000-4000-8000-000000000113', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'cogs_per_unit', current_value: 19.5, unit: 'currency', evidence_ref: 'industry_benchmark', family: 'cost', pack_name: 'Cost Guardrails' },
-  { id: '77000000-0000-4000-8000-000000000114', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'equity_inflows', current_value: 2500000, unit: 'currency', evidence_ref: 'board_plan', family: 'funding', pack_name: 'Funding Plan' },
-  { id: '77000000-0000-4000-8000-000000000115', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'receivables_days', current_value: 14, unit: 'days', evidence_ref: 'platform_terms', family: 'working-capital', pack_name: 'Working Capital Guardrails' },
+const assumptionPacks: AssumptionPackRecord[] = [
+  {
+    id: '78000000-0000-4000-8000-000000000111',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    family: 'market',
+    assumption_family: 'market',
+    pack_name: 'Demand Core',
+    name: 'Demand Core',
+    status: 'draft',
+    is_deleted: false,
+    metadata: {},
+  },
+  {
+    id: '78000000-0000-4000-8000-000000000112',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    family: 'operations',
+    assumption_family: 'operations',
+    pack_name: 'Cost Guardrails',
+    name: 'Cost Guardrails',
+    status: 'draft',
+    is_deleted: false,
+    metadata: {},
+  },
+  {
+    id: '78000000-0000-4000-8000-000000000113',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    family: 'funding',
+    assumption_family: 'funding',
+    pack_name: 'Funding Plan',
+    name: 'Funding Plan',
+    status: 'draft',
+    is_deleted: false,
+    metadata: {},
+  },
+  {
+    id: '78000000-0000-4000-8000-000000000114',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    family: 'operations',
+    assumption_family: 'operations',
+    pack_name: 'Working Capital Guardrails',
+    name: 'Working Capital Guardrails',
+    status: 'draft',
+    is_deleted: false,
+    metadata: {},
+  },
 ];
+
+const assumptionPackBindings: AssumptionPackBindingRecord[] = assumptionPacks.map((pack, index) => ({
+  id: `79000000-0000-4000-8000-${String(index + 111).padStart(12, '0')}`,
+  pack_id: pack.id,
+  assumption_set_id: pack.assumption_set_id,
+  scope_bundle_id: null,
+}));
+
+const defaultPeriodSignature = { period_id: periods[0].id };
+
+const assumptionBindingRows: AssumptionBindingRecord[] = [
+  {
+    id: '77000000-0000-4000-8000-000000000111',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    pack_id: assumptionPacks[0].id,
+    variable_name: 'average_order_value',
+    current_value: 64,
+    unit: 'currency',
+    evidence_ref: 'market_research',
+    family: 'demand',
+    pack_name: 'Demand Core',
+    grain_signature: defaultPeriodSignature,
+  },
+  {
+    id: '77000000-0000-4000-8000-000000000112',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    pack_id: assumptionPacks[0].id,
+    variable_name: 'conversion_rate',
+    current_value: 0.24,
+    unit: 'ratio',
+    evidence_ref: 'historical_data',
+    family: 'demand',
+    pack_name: 'Demand Core',
+    grain_signature: defaultPeriodSignature,
+  },
+  {
+    id: '77000000-0000-4000-8000-000000000113',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    pack_id: assumptionPacks[1].id,
+    variable_name: 'cogs_per_unit',
+    current_value: 19.5,
+    unit: 'currency',
+    evidence_ref: 'industry_benchmark',
+    family: 'cost',
+    pack_name: 'Cost Guardrails',
+    grain_signature: defaultPeriodSignature,
+  },
+  {
+    id: '77000000-0000-4000-8000-000000000114',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    pack_id: assumptionPacks[2].id,
+    variable_name: 'equity_inflows',
+    current_value: 2500000,
+    unit: 'currency',
+    evidence_ref: 'board_plan',
+    family: 'funding',
+    pack_name: 'Funding Plan',
+    grain_signature: defaultPeriodSignature,
+  },
+  {
+    id: '77000000-0000-4000-8000-000000000115',
+    company_id: companyId,
+    assumption_set_id: versions[0].assumption_set_id,
+    pack_id: assumptionPacks[3].id,
+    variable_name: 'receivables_days',
+    current_value: 14,
+    unit: 'days',
+    evidence_ref: 'platform_terms',
+    family: 'working-capital',
+    pack_name: 'Working Capital Guardrails',
+    grain_signature: defaultPeriodSignature,
+  },
+];
+
+function assumptionFamilyForVariable(variableName: string): string {
+  switch (variableName) {
+    case 'average_order_value':
+    case 'conversion_rate':
+    case 'gross_demand':
+    case 'reach_rate':
+    case 'retention_rate':
+    case 'discount_rate':
+    case 'refund_rate':
+    case 'channel_fee_rate':
+      return 'demand';
+    case 'equity_inflows':
+    case 'debt_drawdowns':
+    case 'debt_repayments':
+    case 'debt_outstanding':
+    case 'minimum_cash_buffer':
+    case 'tax_rate':
+    case 'interest_rate':
+    case 'hurdle_rate':
+      return 'funding';
+    case 'receivables_days':
+    case 'payables_days':
+    case 'inventory_days':
+      return 'working-capital';
+    default:
+      return 'cost';
+  }
+}
 
 const researchTasks = [
   { company_id: companyId, entity_type: 'scenario', entity_id: scenarios[0].id, title: 'Validate competitor pricing signal', status: 'open', description: 'Review marketplace discounting trends.' },
@@ -585,6 +768,134 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
     return result([{ dimension_family: 'formats', cnt: 2 }, { dimension_family: 'geography', cnt: 1 }]);
   }
 
+  if (sql.includes('SELECT id, scope_bundle_id FROM assumption_pack_bindings')) {
+    const packId = String(params[0]);
+    const assumptionSetId = String(params[1]);
+    const binding = assumptionPackBindings.find((row) => row.pack_id === packId && row.assumption_set_id === assumptionSetId);
+    return binding ? result([{ id: binding.id, scope_bundle_id: binding.scope_bundle_id }]) : result();
+  }
+
+  if (sql.includes('UPDATE assumption_pack_bindings') && sql.includes('SET scope_bundle_id = $2')) {
+    const binding = assumptionPackBindings.find((row) => row.id === String(params[0]));
+    if (!binding) {
+      return result();
+    }
+    binding.scope_bundle_id = params[1] ? String(params[1]) : null;
+    return result([{ id: binding.id, scope_bundle_id: binding.scope_bundle_id }]);
+  }
+
+  if (sql.includes('INSERT INTO assumption_pack_bindings (pack_id, assumption_set_id, scope_bundle_id)')) {
+    const created: AssumptionPackBindingRecord = {
+      id: nextUuid(9100 + assumptionPackBindings.length + 1),
+      pack_id: String(params[0]),
+      assumption_set_id: String(params[1]),
+      scope_bundle_id: params[2] ? String(params[2]) : null,
+    };
+    assumptionPackBindings.push(created);
+    return result([{ id: created.id }]);
+  }
+
+  if (sql.includes('SELECT ap.id') && sql.includes('FROM assumption_packs ap') && sql.includes('COALESCE(ap.assumption_family::text, ap.family::text) = $2')) {
+    const companyFilter = String(params[0]);
+    const familyFilter = String(params[1]);
+    const assumptionSetId = String(params[2]);
+    const pack = assumptionPacks.find((row) => (
+      row.company_id === companyFilter
+      && !row.is_deleted
+      && (row.assumption_family === familyFilter || row.family === familyFilter)
+      && (
+        row.assumption_set_id === assumptionSetId
+        || assumptionPackBindings.some((binding) => binding.pack_id === row.id && binding.assumption_set_id === assumptionSetId)
+      )
+    ));
+    return pack ? result([{ id: pack.id }]) : result();
+  }
+
+  if (sql.includes('INSERT INTO assumption_packs (') && sql.includes('RETURNING id, created_at')) {
+    const created: AssumptionPackRecord = {
+      id: nextUuid(9200 + assumptionPacks.length + 1),
+      company_id: String(params[0]),
+      family: String(params[1]),
+      assumption_family: String(params[1]),
+      name: String(params[2]),
+      pack_name: String(params[2]),
+      status: 'draft',
+      is_deleted: false,
+      assumption_set_id: params[3] ? String(params[3]) : '',
+      metadata: params[5] ? JSON.parse(String(params[5])) : {},
+    };
+    assumptionPacks.push(created);
+    return result([{ id: created.id, created_at: '2026-04-05T12:00:00.000Z' }]);
+  }
+
+  if (sql.includes('SELECT afb.id, afb.variable_name, afb.unit, afb.grain_signature') && sql.includes('WHERE afb.id = ANY($1)')) {
+    const fieldIds = Array.isArray(params[0]) ? params[0].map(String) : [];
+    const companyFilter = String(params[1]);
+    const assumptionSetId = String(params[2]);
+    const rows = assumptionBindingRows
+      .filter((row) => fieldIds.includes(row.id))
+      .filter((row) => row.company_id === companyFilter && row.assumption_set_id === assumptionSetId)
+      .map((row) => {
+        const pack = assumptionPacks.find((item) => item.id === row.pack_id);
+        return {
+          id: row.id,
+          variable_name: row.variable_name,
+          unit: row.unit,
+          grain_signature: row.grain_signature,
+          assumption_family: pack?.assumption_family || pack?.family || 'operations',
+        };
+      });
+    return result(rows);
+  }
+
+  if (sql.includes('UPDATE assumption_field_bindings') && sql.includes('SET value = $2')) {
+    const binding = assumptionBindingRows.find((row) => row.id === String(params[0]));
+    if (!binding) {
+      return result();
+    }
+    binding.current_value = Number(params[1]);
+    binding.unit = params[2] ? String(params[2]) : binding.unit;
+    binding.grain_signature = params[3] ? JSON.parse(String(params[3])) : {};
+    return result([{ id: binding.id }]);
+  }
+
+  if (sql.includes('INSERT INTO assumption_field_bindings (') && sql.includes('ON CONFLICT (pack_id, variable_name, grain_signature) DO UPDATE')) {
+    const packId = String(params[0]);
+    const variableName = String(params[1]);
+    const grainSignature = params[2] ? JSON.parse(String(params[2])) : {};
+    const value = Number(params[3]);
+    const unit = params[4] ? String(params[4]) : '';
+    const pack = assumptionPacks.find((row) => row.id === packId);
+    const existing = assumptionBindingRows.find((row) => (
+      row.pack_id === packId
+      && row.variable_name === variableName
+      && JSON.stringify(row.grain_signature || {}) === JSON.stringify(grainSignature)
+    ));
+
+    if (existing) {
+      existing.current_value = value;
+      existing.unit = unit;
+      existing.grain_signature = grainSignature;
+      return result([{ id: existing.id }]);
+    }
+
+    const created: AssumptionBindingRecord = {
+      id: nextUuid(9300 + assumptionBindingRows.length + 1),
+      company_id: pack?.company_id || companyId,
+      assumption_set_id: pack?.assumption_set_id || versions[0].assumption_set_id,
+      pack_id: packId,
+      variable_name: variableName,
+      current_value: value,
+      unit,
+      evidence_ref: 'market_research',
+      family: assumptionFamilyForVariable(variableName),
+      pack_name: pack?.pack_name || pack?.name || 'Assumption pack',
+      grain_signature: grainSignature,
+    };
+    assumptionBindingRows.push(created);
+    return result([{ id: created.id }]);
+  }
+
   if (sql.includes('FROM assumption_field_bindings afb') && sql.includes('JOIN assumption_packs ap')) {
     const companyFilter = String(params[0]);
     const assumptionSetId = typeof params[2] === 'string'
@@ -606,6 +917,7 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
         variable_name: row.variable_name,
         value: row.current_value,
         unit: row.unit,
+        grain_signature: row.grain_signature,
         evidence_ref: row.evidence_ref,
         family: row.family,
         pack_name: row.pack_name,

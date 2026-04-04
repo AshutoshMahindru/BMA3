@@ -79,6 +79,7 @@ const scenarioColors = ['bg-blue-600', 'bg-green-600', 'bg-amber-600', 'bg-red-6
    ═══════════════════════════════════════════════════════════════════ */
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const safePathname = pathname || '/dashboard';
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const ctx = usePlanningContext();
@@ -88,17 +89,17 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     for (const g of navGroups) {
       if (g.children) {
         for (const c of g.children) {
-          if (pathname === c.href) return g.key;
+          if (safePathname === c.href) return g.key;
         }
       }
-      if (pathname === g.href) return g.key;
+      if (safePathname === g.href) return g.key;
     }
     return 'overview';
   };
   const activeGroup = getActiveGroup();
 
   /* Breadcrumbs */
-  const breadcrumbSegments = pathname.split('/').filter(Boolean);
+  const breadcrumbSegments = safePathname.split('/').filter(Boolean);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -144,7 +145,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                         {group.children!.map(child => (
                           <Link key={child.href} href={child.href}
                             className={`block px-4 py-2 text-xs font-medium transition ${
-                              pathname === child.href
+                              safePathname === child.href
                                 ? 'text-[#1a2744] bg-gray-50 font-semibold'
                                 : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                             }`}

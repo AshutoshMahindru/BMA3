@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, PlayCircle, RefreshCw, Square, Workflow } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
 import DataFreshness from '@/components/data-freshness';
@@ -160,6 +160,25 @@ function statusTone(status: string): string {
   return 'bg-amber-100 text-amber-700 border-amber-200';
 }
 
+function durationLabel(startedAt: string, completedAt: string) {
+  if (!startedAt || !completedAt) {
+    return 'Pending';
+  }
+
+  const started = new Date(startedAt);
+  const completed = new Date(completedAt);
+  if (Number.isNaN(started.getTime()) || Number.isNaN(completed.getTime())) {
+    return 'Pending';
+  }
+
+  const diffMs = Math.max(completed.getTime() - started.getTime(), 0);
+  if (diffMs >= 60_000) {
+    return `${Math.round(diffMs / 60_000)} min`;
+  }
+
+  return `${Math.round(diffMs / 1_000)} sec`;
+}
+
 export default function ComputeCenterPage() {
   const ctx = usePlanningContext();
   const activeScenario = ctx.scenarios.find((scenario) => scenario.scenarioId === ctx.scenarioId);
@@ -186,7 +205,7 @@ export default function ComputeCenterPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
-  async function loadRunDetails(runId: string) {
+  const loadRunDetails = useCallback(async (runId: string) => {
     const [detailResult, stepsResult, resultsResult] = await Promise.all([
       getComputeRunsById(runId),
       getComputeRunsSteps(runId, { limit: 30 }),
@@ -196,9 +215,9 @@ export default function ComputeCenterPage() {
     setRunDetail(normalizeRunDetail(detailResult.data));
     setSteps(normalizeSteps(stepsResult.data));
     setResults(normalizeResults(resultsResult.data));
-  }
+  }, []);
 
-  async function loadComputeCenter() {
+  const loadComputeCenter = useCallback(async () => {
     if (!ctx.companyId || !ctx.scenarioId) {
       setRuns([]);
       setSelectedRunId('');
@@ -256,12 +275,11 @@ export default function ComputeCenterPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [ctx.companyId, ctx.scenarioId, versionId, loadRunDetails]);
 
   useEffect(() => {
     void loadComputeCenter();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ctx.companyId, ctx.scenarioId, versionId]);
+  }, [loadComputeCenter]);
 
   const outputRows = useMemo(
     () => Object.entries(results.outputSummary).sort((left, right) => right[1] - left[1]),
@@ -272,6 +290,45 @@ export default function ComputeCenterPage() {
   const progressPct = runDetail && runDetail.stepsTotal > 0
     ? Math.round((runDetail.stepsCompleted / runDetail.stepsTotal) * 100)
     : 0;
+  const queueStats = useMemo(() => {
+    const stats = { queued: 0, inFlight: 0, failed: 0, completed: 0 };
+
+    for (const run of runs) {
+      const normalized = run.status.trim().toLowerCase();
+      if (normalized === 'queued') {
+        stats.queued += 1;
+      } else if (normalized === 'running' || normalized === 'processing') {
+        stats.inFlight += 1;
+      } else if (normalized === 'failed' || normalized === 'error') {
+        stats.failed += 1;
+      } else if (normalized === 'completed') {
+        stats.completed += 1;
+      }
+    }
+
+    return stats;
+  }, [runs]);
+  const hasActiveQueueWork = queueStats.queued > 0 || queueStats.inFlight > 0;
+  const selectedOutputTotal = useMemo(
+    () => Object.values(results.outputSummary).reduce((sum, count) => sum + count, 0),
+    [results.outputSummary],
+  );
+  const latestCompletedRun = useMemo(
+    () => runs.filter((run) => run.completedAt).sort((left, right) => right.completedAt.localeCompare(left.completedAt))[0] || null,
+    [runs],
+  );
+
+  useEffect(() => {
+    if (!ctx.companyId || !ctx.scenarioId || !hasActiveQueueWork) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      void loadComputeCenter();
+    }, 5_000);
+
+    return () => window.clearInterval(timer);
+  }, [ctx.companyId, ctx.scenarioId, hasActiveQueueWork, loadComputeCenter]);
 
   return (
     <div className="px-6 py-8 space-y-6">
@@ -390,6 +447,54 @@ export default function ComputeCenterPage() {
           <p className="mt-2 text-xs text-gray-500">Pipeline stages on the canonical execution path.</p>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-gray-900">Queue Observability</h2>
+            <p className="mt-2 text-sm text-gray-500">
+              Queue depth, failure pressure, and selected run output totals derived from the live compute endpoints.
+            </p>
+          </div>
+          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone(hasActiveQueueWork ? 'running' : 'completed')}`}>
+            {hasActiveQueueWork ? 'Auto-Refresh 5s' : 'Manual Refresh'}
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Queued Backlog</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{queueStats.queued}</p>
+            <p className="mt-2 text-xs text-gray-500">Runs waiting to execute.</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">In Flight</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{queueStats.inFlight}</p>
+            <p className="mt-2 text-xs text-gray-500">Runs currently processing.</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Failed Runs</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{queueStats.failed}</p>
+            <p className="mt-2 text-xs text-gray-500">Runs requiring operator review.</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Last Completed Duration</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">
+              {latestCompletedRun ? durationLabel(latestCompletedRun.createdAt, latestCompletedRun.completedAt) : 'Pending'}
+            </p>
+            <p className="mt-2 text-xs text-gray-500">
+              {latestCompletedRun?.completedAt ? `Completed ${formatDateTime(latestCompletedRun.completedAt)}` : 'No completed run recorded.'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400">Selected Output Rows</p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{selectedOutputTotal}</p>
+            <p className="mt-2 text-xs text-gray-500">
+              {selectedRun ? `${titleCase(selectedRun.status)} run artifact total.` : 'Select a run to inspect outputs.'}
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-6">
         <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
