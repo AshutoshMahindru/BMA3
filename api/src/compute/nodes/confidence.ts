@@ -52,6 +52,7 @@ interface AssumptionDQI {
 }
 
 type ConfidenceBand = 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
+type EvidenceTypeKey = keyof typeof EVIDENCE_TYPE_SCORES;
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,52 @@ function weightedAverage(values: number[], weights: number[]): number {
   if (totalWeight === 0) return 0;
   const weightedSum = values.reduce((sum, v, i) => sum + v * weights[i], 0);
   return weightedSum / totalWeight;
+}
+
+function normalizeEvidenceType(rawEvidenceType?: string | null, rawEvidenceRef?: string | null): EvidenceTypeKey {
+  const candidates = [rawEvidenceType, rawEvidenceRef].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0
+  );
+
+  for (const candidate of candidates) {
+    const normalized = candidate
+      .trim()
+      .toLowerCase()
+      .replace(/[%/.:()-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const compact = normalized.replace(/\s+/g, '_');
+    if (compact in EVIDENCE_TYPE_SCORES) {
+      return compact as EvidenceTypeKey;
+    }
+
+    if (normalized.includes('market') && normalized.includes('research')) {
+      return 'market_research';
+    }
+    if (normalized.includes('historical') || normalized.includes('actual') || normalized.includes('past data')) {
+      return 'historical_data';
+    }
+    if (normalized.includes('industry') || normalized.includes('benchmark')) {
+      return 'industry_benchmark';
+    }
+    if (
+      (normalized.includes('expert') && normalized.includes('estimate')) ||
+      normalized.includes('expert opinion') ||
+      normalized.includes('consultant')
+    ) {
+      return 'expert_estimate';
+    }
+    if (
+      (normalized.includes('operator') && normalized.includes('input')) ||
+      normalized.includes('manual input') ||
+      normalized.includes('founder input')
+    ) {
+      return 'operator_input';
+    }
+  }
+
+  return 'unknown';
 }
 
 // ── Main execution ───────────────────────────────────────────────────────────
@@ -268,8 +315,7 @@ export async function executeConfidence(
     );
 
     const binding = bindingResult.rows[0];
-    // Prefer evidence_type column; fall back to evidence_ref; default to 'unknown'
-    const evidenceType = binding?.evidence_type ?? binding?.evidence_ref ?? 'unknown';
+    const evidenceType = normalizeEvidenceType(binding?.evidence_type, binding?.evidence_ref);
     const entityId = binding?.id;
 
     // Check if we have existing DQI scores for this entity
@@ -294,7 +340,7 @@ export async function executeConfidence(
       traceabilityScore = existingScores.traceability_score;
     } else {
       // Auto-score based on evidence type
-      const baseScore = EVIDENCE_TYPE_SCORES[evidenceType] ?? EVIDENCE_TYPE_SCORES['unknown'];
+      const baseScore = EVIDENCE_TYPE_SCORES[evidenceType];
 
       sourceQualityScore = baseScore;
 
@@ -368,7 +414,7 @@ export async function executeConfidence(
             overall_score, computed_at, created_at)
          VALUES ($1, 'assumption_field', $2,
                  $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-         ON CONFLICT (entity_type, entity_id)
+         ON CONFLICT ON CONSTRAINT uq_dqi_scores_entity
          DO UPDATE SET
            source_quality_score = $3, freshness_score = $4, completeness_score = $5,
            relevance_score = $6, granularity_score = $7, consistency_score = $8,
@@ -395,7 +441,7 @@ export async function executeConfidence(
             status, rationale, evidence_count, created_at, updated_at)
          VALUES ($1, $2, 'assumption_field', $3, $4, $5,
                  'active', $6, 0, NOW(), NOW())
-         ON CONFLICT (entity_type, entity_id)
+         ON CONFLICT ON CONSTRAINT uq_confidence_assessments_entity
          DO UPDATE SET
            state = $4, numeric_score = $5, rationale = $6, updated_at = NOW()`,
         [
