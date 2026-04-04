@@ -24,7 +24,8 @@ original Wave 1-only state:
   `assumptions`, `financials`, `compute`, and a partial `analysis` bridge
 - Core finance screens are already rewired to `web/lib/api-client.ts`
 - `risk` and `simulations` are also rewired to canonical routes
-- Local runtime is PostgreSQL-only by default with `npm run smoke:canonical`
+- Canonical smoke and CI now exercise the queued compute runtime, and the
+  compose stack is verified with Postgres + Redis + API + worker + web
 - No active legacy frontend boundary remains on the dashboard surfaces; Wave 5
   hardening is now closed, and the remaining repo work is optional post-wave
   parity/UX refinement rather than a tracked SpecOS compliance blocker
@@ -110,7 +111,8 @@ original Wave 1-only state:
 | Core finance screens rewired | **DONE** | `traceability.json` |
 | `web/app/dashboard/risk/page.tsx` | **DONE** | canonical `analysis/risk` |
 | `web/app/dashboard/simulations/page.tsx` | **DONE** | canonical `analysis/simulation-runs` |
-| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions API live for the wired subset; backend pack/apply + override flows now persist against assumption-pack tables |
+| `web/app/dashboard/assumptions/page.tsx` | **DONE** | canonical assumptions overview route |
+| `web/app/dashboard/assumptions/[family]/page.tsx` | **DONE** | canonical routed family surfaces for demand, cost, funding, and working capital |
 | `web/app/dashboard/markets/page.tsx` | **DONE** | canonical `decisions/markets` API |
 | `web/app/dashboard/analysis/compare/page.tsx` | **DONE** | canonical Scenario Comparison Console route |
 | `web/app/dashboard/scope/page.tsx` | **DONE** | canonical scope route index |
@@ -133,11 +135,11 @@ original Wave 1-only state:
 | `api/src/middleware/auth.ts` | **DONE** | JWT bearer claims + local dev token |
 | `api/src/middleware/tenant.ts` | **DONE** | JWT claims + company/tenant ownership enforcement |
 | Structured logging (pino) | **DONE** | `console.*` removed from production API runtime / compute code |
-| Canonical smoke script + CI job | **DONE** | execution baseline |
+| Canonical smoke script + CI job | **DONE** | compose-backed queued runtime gate |
 | Complete docker-compose | **DONE** | Postgres + Redis + API + worker + web boot locally via `docker compose up -d`; container-native `node_modules` volumes prevent host-binary drift, and compose-hosted queued compute completes successfully |
 | `db/migrations/` tooling | **DONE** | `node-pg-migrate` scripts + baseline migration scaffold |
 | `tests/api/contracts.test.ts` | **DONE** | app boot + auth/envelope smoke against canonical routes |
-| `tests/e2e/dashboard.test.ts` | **DONE** | Playwright full-stack route smoke with fixture API (`7/7` local) |
+| `tests/e2e/dashboard.test.ts` | **DONE** | Playwright full-stack route smoke with fixture API (`9/9` local) |
 | Flip compliance to blocking CI | **DONE** | spec compliance now fails CI on error/warn regressions |
 
 ## DDL Alignment Fix Log (Wave 3)
@@ -176,9 +178,8 @@ All Wave 4 blocking legacy files have been resolved:
 Wave 5 also removed the remaining stub data files under `web/lib/data/`, so the
 dashboard surfaces no longer depend on static `.ts` data shims.
 
-One remaining product caveat sits outside the Wave 5 gate: the seeded base
-scenario still emits balance-sheet reconciliation warnings during compute steps
-11 and 16, so runtime parity is ahead of seeded-financial cleanup there.
+No tracked post-wave parity blockers are currently open. Remaining work is
+optional product/UX refinement rather than SpecOS closure work.
 
 ## Compliance Snapshot
 
@@ -219,3 +220,4 @@ Last verified after compose runtime closure:
 | 24 | 2026-04-05 | Post-Wave assumptions behavior closure | Replaced the remaining stubbed assumptions handlers with live SQL-backed behavior on `assumption_packs`, `assumption_pack_bindings`, `assumption_field_bindings`, and `assumption_override_log`. `/packs`, `/packs/:packId/apply`, family reads/writes, and `/overrides` now resolve against the active assumption set, persist updates for compute, and expose live contract responses. Added contract coverage for demand reads, funding bulk upserts, pack apply, and overrides. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand` (`123/123`), and `python3 scripts/spec-compliance.py` (`9/9`, 0 warnings). | compliant, 0 failures |
 | 25 | 2026-04-05 | Post-Wave seeded financial reconciliation cleanup | Added migration `006-reconcile-seeded-opening-balances.sql` to zero the seeded bootstrap values for `depreciation`, `amortization`, and `debt_outstanding` across the canonical assumption packs. This fixes the local base-scenario warning path where the compute engine starts with zero opening PPE/equity but the bootstrap packs were seeding carried-state balances, which caused negative PPE and step 11/16 balance-sheet warnings on the seeded runtime. Re-verified with `npm run migrate:up`, a compose-hosted queued compute run on `Base Case 2025` (18/18 steps, `ppeNet=0`, `debtOutstanding=0`, `isBalanced=true` in worker logs), `npm test -- --runInBand`, and `python3 scripts/spec-compliance.py`. | compliant, 0 failures |
 | 26 | 2026-04-05 | Post-Wave canonical smoke alignment | Updated `api/scripts/smoke-canonical-runtime.ts` to support the live async compute runtime by polling `/compute/runs/:runId` from `queued`/`running` to a terminal state, verifying completed step records via `/steps`, and asserting `freshness=fresh` instead of assuming synchronous `outputSummary` population. Also corrected the analysis doc’s migration count from 5 to 6 and removed the stale smoke-script follow-up note. Re-verified with `npm --prefix api run smoke:canonical`, `python3 scripts/spec-compliance.py`, and `git diff --check`. | compliant, 0 failures |
+| 27 | 2026-04-05 | Post-Wave async parity + assumptions route split | Completed async compute result parity by moving run-artifact/output-count emission into the live orchestrator path and sharing the artifact manifest helper with the synchronous compute route, then switched the CI smoke job to the compose-backed async stack. Replaced the legacy 8-tab assumptions shell with a canonical overview route plus routed family surfaces for demand, cost, funding, and working capital, expanded Playwright coverage for the new routes, and cleaned up the status trackers to remove the now-stale assumptions-consolidation gap. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand` (`123/123`), `npm run test:e2e` (`9/9`), `npm --prefix api run smoke:canonical`, and `python3 scripts/spec-compliance.py`. | compliant, 0 failures |

@@ -5,6 +5,11 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { idSchema, requireTenantId } from './_shared';
 import { getComputeQueue, isAsyncComputeEnabled } from '../../lib/queue';
+import {
+  dependencyGraph,
+  projectionCountsByScenario,
+  replaceRunArtifacts,
+} from '../../compute/run-artifacts';
 
 const router = Router();
 
@@ -67,26 +72,6 @@ async function ensurePlanningContext(companyId: string, scenarioId: string, vers
   return version.rows[0];
 }
 
-async function projectionCounts(scenarioId: string) {
-  const [pnl, cash, balance, unit, kpi, explainability] = await Promise.all([
-    db.query('SELECT COUNT(*)::int AS count FROM pnl_projections WHERE scenario_id::text = $1', [scenarioId]),
-    db.query('SELECT COUNT(*)::int AS count FROM cashflow_projections WHERE scenario_id::text = $1', [scenarioId]),
-    db.query('SELECT COUNT(*)::int AS count FROM balance_sheet_projections WHERE scenario_id::text = $1', [scenarioId]),
-    db.query('SELECT COUNT(*)::int AS count FROM unit_economics_projections WHERE scenario_id::text = $1', [scenarioId]),
-    db.query('SELECT COUNT(*)::int AS count FROM kpi_projections WHERE scenario_id::text = $1', [scenarioId]),
-    db.query('SELECT COUNT(*)::int AS count FROM driver_explainability WHERE scenario_id::text = $1', [scenarioId]),
-  ]);
-
-  return {
-    pnl: Number(pnl.rows[0]?.count || 0),
-    cashflow: Number(cash.rows[0]?.count || 0),
-    balanceSheet: Number(balance.rows[0]?.count || 0),
-    unitEconomics: Number(unit.rows[0]?.count || 0),
-    kpis: Number(kpi.rows[0]?.count || 0),
-    explainability: Number(explainability.rows[0]?.count || 0),
-  };
-}
-
 async function resolveQueuedPeriodRange(companyId: string) {
   const result = await db.query(
     `SELECT MIN(pp.start_date) AS start_date,
@@ -123,19 +108,6 @@ async function insertStep(client: { query: (sql: string, params?: any[]) => Prom
   );
 }
 
-const dependencyGraph = {
-  nodes: [
-    { id: 'planning_spine', label: 'Resolve Planning Spine', stage: 'context' },
-    { id: 'financial_aggregate', label: 'Aggregate Seeded Financials', stage: 'compute' },
-    { id: 'artifact_manifest', label: 'Record Artifacts', stage: 'finalize' },
-  ],
-  edges: [
-    { from: 'planning_spine', to: 'financial_aggregate' },
-    { from: 'financial_aggregate', to: 'artifact_manifest' },
-  ],
-  criticalPath: ['planning_spine', 'financial_aggregate', 'artifact_manifest'],
-};
-
 router.post('/validations', validate(ValidationCreateBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { companyId, scenarioId, versionId } = req.body;
@@ -148,7 +120,7 @@ router.post('/validations', validate(ValidationCreateBody), async (req: Request,
     }
 
     const validationId = crypto.randomUUID();
-    const counts = await projectionCounts(scenarioId);
+    const counts = await projectionCountsByScenario(scenarioId);
     const hasOutputs = Object.values(counts).some((count) => count > 0);
 
     await db.query(
@@ -286,7 +258,7 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
       });
     }
 
-    const counts = await projectionCounts(scenarioId);
+    const counts = await projectionCountsByScenario(scenarioId);
     const warnings = Object.values(counts).some((count) => count > 0)
       ? []
       : ['No seeded financial projections were found for this scenario.'];
@@ -392,35 +364,14 @@ router.post('/runs', validate(ComputeRunCreateBody), async (req: Request, res: R
     await insertStep(client, runId, 2, 'aggregate_financials', 'Aggregate seeded projections', counts);
     await insertStep(client, runId, 3, 'finalize', 'Finalize compute run', { warningCount: warnings.length });
 
-    const artifactRows = [
-      ['pnl_projections', counts.pnl],
-      ['cashflow_projections', counts.cashflow],
-      ['balance_sheet_projections', counts.balanceSheet],
-      ['unit_economics_projections', counts.unitEconomics],
-      ['kpi_projections', counts.kpis],
-      ['driver_explainability', counts.explainability],
-    ];
-
-    for (const [artifactType, rowCount] of artifactRows) {
-      await client.query(
-        `INSERT INTO compute_run_artifacts (compute_run_id, artifact_type, row_count, metadata)
-         VALUES ($1, $2, $3, '{}'::jsonb)`,
-        [runId, artifactType, rowCount],
-      );
-    }
-
-    await client.query(
-      `INSERT INTO compute_dependency_snapshots
-         (compute_run_id, snapshot_hash, dependency_manifest, assumption_set_ids, scope_bundle_state, metadata)
-       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, '{}'::jsonb)`,
-      [
-        runId,
-        crypto.createHash('sha1').update(`${companyId}:${scenarioId}:${versionId}`).digest('hex'),
-        JSON.stringify(dependencyGraph),
-        JSON.stringify([version.assumption_set_id]),
-        JSON.stringify({ scopeBundleId: null }),
-      ],
-    );
+    await replaceRunArtifacts({
+      runId,
+      companyId,
+      scenarioId,
+      versionId,
+      assumptionSetId: version.assumption_set_id ? String(version.assumption_set_id) : null,
+      counts,
+    });
 
     await client.query('COMMIT');
 

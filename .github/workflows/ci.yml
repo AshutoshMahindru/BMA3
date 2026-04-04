@@ -127,34 +127,36 @@ jobs:
         with:
           node-version: 20
 
-      - name: Start Postgres
-        run: docker compose up -d postgres
+      - name: Start compose runtime
+        run: docker compose up -d postgres redis api worker
 
       - name: Install API dependencies
         working-directory: api
         run: npm ci
 
-      - name: Start API
-        working-directory: api
-        run: |
-          nohup npm run dev >/tmp/bma3-api.log 2>&1 &
-
       - name: Wait for API health
         run: |
-          for i in {1..30}; do
+          for i in {1..60}; do
             if curl -fsS http://127.0.0.1:4000/api/v1/health >/dev/null; then
               exit 0
             fi
             sleep 2
           done
           echo "API failed to become healthy"
-          cat /tmp/bma3-api.log
+          docker compose logs api worker
           exit 1
 
       - name: Canonical smoke
         working-directory: api
+        env:
+          API_BASE_URL: http://127.0.0.1:4000/api/v1
+          API_TOKEN: dev-local-token
         run: npm run smoke:canonical
 
-      - name: Show API log on failure
+      - name: Show compose logs on failure
         if: failure()
-        run: cat /tmp/bma3-api.log
+        run: docker compose logs api worker redis postgres
+
+      - name: Shutdown compose runtime
+        if: always()
+        run: docker compose down -v --remove-orphans
