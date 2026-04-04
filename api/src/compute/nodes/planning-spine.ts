@@ -12,6 +12,7 @@
 
 import { db } from '../../db';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executePlanningSpine(
   ctx: ComputeContext,
@@ -62,8 +63,8 @@ export async function executePlanningSpine(
 
   // ── Step 3: Resolve version state ───────────────────────────────────────
   const versionResult = await db.query(
-    `SELECT id, status, label
-     FROM versions
+    `SELECT id, status, version_label
+     FROM plan_versions
      WHERE id = $1 AND scenario_id = $2`,
     [ctx.version_id, ctx.scenario_id]
   );
@@ -71,7 +72,7 @@ export async function executePlanningSpine(
   if (versionResult.rows.length === 0) {
     // Try without scenario constraint — version may exist but not be linked
     const versionExistsResult = await db.query(
-      `SELECT id, status FROM versions WHERE id = $1`,
+      `SELECT id, status FROM plan_versions WHERE id = $1`,
       [ctx.version_id]
     );
 
@@ -80,14 +81,15 @@ export async function executePlanningSpine(
     }
 
     // Version exists but wrong scenario — proceed with warning
-    console.warn(
-      `[planning-spine] Version ${ctx.version_id} exists but not linked to scenario ${ctx.scenario_id}. Proceeding.`
+    logger.warn(
+      { version_id: ctx.version_id, scenario_id: ctx.scenario_id },
+      'Version exists but not linked to scenario, proceeding'
     );
   }
 
   // Validate version state allows compute
   // Valid compute states: working_draft, submitted, approved (not published/frozen)
-  const version = versionResult.rows[0] ?? { status: 'working_draft' };
+  const version = versionResult.rows[0] ?? { status: 'working_draft', version_label: null };
   const computeBlockedStates = ['frozen', 'rejected'];
   if (computeBlockedStates.includes(version.status)) {
     throw new Error(
@@ -128,9 +130,9 @@ export async function executePlanningSpine(
     const gapDays = (currStart.getTime() - prevEnd.getTime()) / (1000 * 60 * 60 * 24);
 
     if (gapDays > 1) {
-      console.warn(
-        `[planning-spine] Gap of ${gapDays} days between period ${periods[i - 1].label} ` +
-        `and ${periods[i].label}`
+      logger.warn(
+        { gapDays, prev: periods[i - 1].label, curr: periods[i].label },
+        'Planning-spine gap between periods'
       );
     }
   }
@@ -162,9 +164,15 @@ export async function executePlanningSpine(
     periods,
   };
 
-  console.log(
-    `[planning-spine] Resolved: company=${company.name}, scenario=${scenario.name}, ` +
-    `version=${version.status ?? 'default'}, periods=${periods.length} ` +
-    `(${periods[0].label} → ${periods[periods.length - 1].label})`
+  logger.info(
+    {
+      company: company.name,
+      scenario: scenario.name,
+      version: version.status ?? 'default',
+      periodsCount: periods.length,
+      firstPeriod: periods[0].label,
+      lastPeriod: periods[periods.length - 1].label,
+    },
+    'Planning-spine resolved'
   );
 }

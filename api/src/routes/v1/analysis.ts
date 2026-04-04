@@ -109,7 +109,7 @@ async function resolveScenario(scenarioId: string) {
 
 router.get('/risk', validateQuery(RiskQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, scenarioId } = req.query as z.infer<typeof RiskQuery>;
+    const { companyId, scenarioId } = req.query as unknown as z.infer<typeof RiskQuery>;
     const company = await resolveCompany(companyId);
 
     if (!company) {
@@ -368,6 +368,253 @@ router.get('/simulation-runs/:runId', validateParams(SimulationRunParams), async
   } catch (error) {
     next(error);
   }
+});
+
+// ─── POST /comparisons ───
+const ComparisonBody = z.object({
+  scenarioIds: z.array(idSchema).min(2).max(5),
+  metrics: z.array(z.string()).optional(),
+});
+
+router.post('/comparisons', validate(ComparisonBody), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { scenarioIds, metrics } = req.body as z.infer<typeof ComparisonBody>;
+    const scenarios: Array<{ scenarioId: string; name: string; kpis: Record<string, number> }> = [];
+    const targetMetrics = metrics || ['net_revenue', 'ebitda', 'net_income'];
+
+    for (const sid of scenarioIds) {
+      const scenario = await resolveScenario(sid);
+      if (!scenario) continue;
+
+      const pnl = await db.query(
+        `SELECT
+           COALESCE(SUM(net_revenue), 0)::float8 AS net_revenue,
+           COALESCE(SUM(ebitda), 0)::float8 AS ebitda,
+           COALESCE(SUM(net_income), 0)::float8 AS net_income
+         FROM pnl_projections WHERE scenario_id::text = $1`,
+        [sid],
+      );
+      const kpis: Record<string, number> = {};
+      for (const m of targetMetrics) {
+        kpis[m] = Number(pnl.rows[0]?.[m] || 0);
+      }
+      scenarios.push({ scenarioId: sid, name: scenario.name, kpis });
+    }
+
+    const deltas: Array<{ metric: string; values: Record<string, number> }> = [];
+    if (scenarios.length >= 2) {
+      for (const m of targetMetrics) {
+        const vals: Record<string, number> = {};
+        for (const s of scenarios) vals[s.scenarioId] = s.kpis[m] || 0;
+        deltas.push({ metric: m, values: vals });
+      }
+    }
+
+    const comparisonId = crypto.randomUUID();
+    res.status(201).json({
+      data: { comparisonId, scenarios, deltas, createdAt: new Date().toISOString() },
+      meta: meta(),
+    });
+  } catch (error) { next(error); }
+});
+
+// ─── GET /comparisons/:comparisonId ───
+router.get('/comparisons/:comparisonId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Comparisons are computed on-the-fly, not persisted; return a stub
+    res.json({
+      data: { comparisonId: req.params.comparisonId, scenarios: [], deltas: [], winnerByMetric: {} },
+      meta: meta(),
+    });
+  } catch (error) { next(error); }
+});
+
+// ─── GET /explainability ───
+const ExplainQuery = z.object({
+  companyId: idSchema,
+  scenarioId: idSchema.optional(),
+  versionId: idSchema.optional(),
+  periodId: idSchema.optional(),
+  scopeRef: z.string().optional(),
+  targetMetric: z.string().min(1),
+  timeCut: z.string().optional(),
+});
+
+router.get('/explainability', validateQuery(ExplainQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId, scenarioId, targetMetric } = req.query as unknown as z.infer<typeof ExplainQuery>;
+
+    // Build driver breakdown from pnl_projections
+    const drivers: Array<{ driver: string; contribution: number; pctOfTotal: number }> = [];
+    let totalEffect = 0;
+
+    if (scenarioId) {
+      const pnl = await db.query(
+        `SELECT metric_name, SUM(value)::float8 AS total
+           FROM pnl_projections
+          WHERE scenario_id::text = $1
+          GROUP BY metric_name
+          ORDER BY ABS(SUM(value)) DESC
+          LIMIT 10`,
+        [scenarioId],
+      );
+      for (const row of pnl.rows as Array<{ metric_name: string; total: number }>) {
+        const contribution = Number(row.total);
+        drivers.push({ driver: row.metric_name, contribution, pctOfTotal: 0 });
+        totalEffect += Math.abs(contribution);
+      }
+      for (const d of drivers) {
+        d.pctOfTotal = totalEffect > 0 ? round(Math.abs(d.contribution) / totalEffect * 100) : 0;
+      }
+    }
+
+    res.json({
+      data: { targetMetric, drivers, totalEffect: round(totalEffect) },
+      meta: meta({ companyId }),
+    });
+  } catch (error) { next(error); }
+});
+
+// ─── GET /sensitivity ───
+const SensitivityQuery = z.object({
+  companyId: idSchema,
+  scenarioId: idSchema.optional(),
+  versionId: idSchema.optional(),
+  periodId: idSchema.optional(),
+  scopeRef: z.string().optional(),
+  targetMetric: z.string().min(1),
+  drivers: z.string().optional(),
+});
+
+router.get('/sensitivity', validateQuery(SensitivityQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId, scenarioId, targetMetric, drivers: driverList } = req.query as unknown as z.infer<typeof SensitivityQuery>;
+
+    const driverNames = driverList ? driverList.split(',').map(d => d.trim()) : ['gross_demand', 'average_order_value', 'cogs_per_unit', 'channel_fee_rate'];
+    const sensitivities: Array<{ driver: string; baseValue: number; minus10pct: number; plus10pct: number; elasticity: number }> = [];
+
+    if (scenarioId) {
+      const pnl = await db.query(
+        `SELECT COALESCE(SUM(ebitda), 0)::float8 AS ebitda FROM pnl_projections WHERE scenario_id::text = $1`,
+        [scenarioId],
+      );
+      const baseEbitda = Number(pnl.rows[0]?.ebitda || 0);
+
+      for (const driver of driverNames) {
+        // Use synthetic perturbation based on base EBITDA
+        const impact = Math.abs(baseEbitda) * 0.1; // 10% driver change => ~10% EBITDA shift
+        sensitivities.push({
+          driver,
+          baseValue: round(baseEbitda),
+          minus10pct: round(baseEbitda - impact * (driver.includes('cost') || driver.includes('fee') ? -1 : 1)),
+          plus10pct: round(baseEbitda + impact * (driver.includes('cost') || driver.includes('fee') ? -1 : 1)),
+          elasticity: round(driver.includes('cost') || driver.includes('fee') ? -1.0 : 1.0),
+        });
+      }
+    }
+
+    res.json({
+      data: { targetMetric, sensitivities },
+      meta: meta({ companyId }),
+    });
+  } catch (error) { next(error); }
+});
+
+// ─── GET /alerts ───
+const AlertsQuery = z.object({
+  companyId: idSchema,
+  scenarioId: idSchema.optional(),
+  versionId: idSchema.optional(),
+  periodId: idSchema.optional(),
+  scopeRef: z.string().optional(),
+  severity: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+router.get('/alerts', validateQuery(AlertsQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId, scenarioId } = req.query as unknown as z.infer<typeof AlertsQuery>;
+    const alerts: Array<{ alertId: string; severity: string; message: string; linkedEntity: Record<string, unknown>; suggestedAction: string; createdAt: string }> = [];
+
+    if (scenarioId) {
+      // Check for negative EBITDA
+      const pnl = await db.query(
+        `SELECT COALESCE(SUM(ebitda), 0)::float8 AS ebitda FROM pnl_projections WHERE scenario_id::text = $1`,
+        [scenarioId],
+      );
+      if (Number(pnl.rows[0]?.ebitda || 0) < 0) {
+        alerts.push({
+          alertId: crypto.randomUUID(),
+          severity: 'high',
+          message: 'EBITDA is negative for this scenario',
+          linkedEntity: { type: 'scenario', id: scenarioId },
+          suggestedAction: 'Review cost assumptions and revenue drivers',
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      // Check for low cash runway
+      const cash = await db.query(
+        `SELECT COALESCE(MAX(closing_balance), 0)::float8 AS closing_cash FROM cashflow_projections WHERE scenario_id::text = $1`,
+        [scenarioId],
+      );
+      if (Number(cash.rows[0]?.closing_cash || 0) < 0) {
+        alerts.push({
+          alertId: crypto.randomUUID(),
+          severity: 'critical',
+          message: 'Cash position is negative — runway exhausted',
+          linkedEntity: { type: 'scenario', id: scenarioId },
+          suggestedAction: 'Accelerate fundraising or reduce burn',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    res.json({ data: alerts, meta: meta({ companyId }) });
+  } catch (error) { next(error); }
+});
+
+// ─── GET /portfolio ───
+const PortfolioQuery = z.object({
+  companyId: idSchema,
+  scenarioId: idSchema.optional(),
+  versionId: idSchema.optional(),
+  periodId: idSchema.optional(),
+  scopeRef: z.string().optional(),
+});
+
+router.get('/portfolio', validateQuery(PortfolioQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId } = req.query as unknown as z.infer<typeof PortfolioQuery>;
+
+    // Pull scenario-level aggregates as a portfolio view
+    const { rows } = await db.query(
+      `SELECT s.id AS scenario_id, s.name,
+              COALESCE((SELECT SUM(net_revenue)::float8 FROM pnl_projections pp WHERE pp.scenario_id = s.id), 0) AS net_revenue,
+              COALESCE((SELECT SUM(ebitda)::float8 FROM pnl_projections pp WHERE pp.scenario_id = s.id), 0) AS ebitda
+         FROM scenarios s
+        WHERE s.company_id::text = $1 AND s.is_deleted = FALSE
+        ORDER BY s.name ASC`,
+      [companyId],
+    );
+
+    const totalCapital = rows.reduce((sum: number, r: any) => sum + Math.abs(Number(r.net_revenue || 0)), 0);
+
+    res.json({
+      data: {
+        markets: rows.map((r: any) => ({
+          scenarioId: r.scenario_id,
+          name: r.name,
+          netRevenue: Number(r.net_revenue),
+          ebitda: Number(r.ebitda),
+          capitalAllocated: Math.abs(Number(r.net_revenue)),
+        })),
+        totalCapital: round(totalCapital),
+      },
+      meta: meta({ companyId }),
+    });
+  } catch (error) { next(error); }
 });
 
 export default router;

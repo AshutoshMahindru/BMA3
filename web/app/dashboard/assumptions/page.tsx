@@ -9,7 +9,20 @@ import {
 import { AgGridReact } from 'ag-grid-react';
 import { ModuleRegistry, AllCommunityModule } from 'ag-grid-community';
 import { usePlanningContext } from '@/lib/planning-context';
-import { getAssumptionsSets } from '@/lib/api-client';
+import {
+  getAssumptionsSets,
+  getAssumptionsDemand,
+  getAssumptionsCost,
+  getAssumptionsFunding,
+  getAssumptionsWorkingCapital,
+  upsertAssumptionsDemandBulk,
+  upsertAssumptionsCostBulk,
+  upsertAssumptionsFundingBulk,
+  upsertAssumptionsWorkingCapitalBulk,
+  createComputeRuns,
+} from '@/lib/api-client';
+import DataFreshness from '@/components/data-freshness';
+import type { DataSource } from '@/lib/data-source';
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 import 'ag-grid-community/styles/ag-grid.css';
@@ -244,6 +257,8 @@ export default function AssumptionsManager() {
   const [banner, setBanner] = useState<{ tone: 'warning' | 'error'; text: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [setInfo, setSetInfo] = useState<AssumptionPanelInfo>(defaultSetInfo);
+  const [dataSource, setDataSource] = useState<DataSource>('static');
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
   /* Per-tab row state — persists across tab switches */
   const [tabRows, setTabRows] = useState<Record<string, any[]>>(() => {
@@ -327,14 +342,78 @@ export default function AssumptionsManager() {
     };
   }, [ctx.companyId, ctx.companyName, ctx.scenarioId, selectedScenario?.latestVersionId]);
 
+  /* Load canonical assumption data from API when context changes */
   useEffect(() => {
-    const nextRows: Record<string, any[]> = {};
-    for (const key of Object.keys(tabSeedData)) {
-      nextRows[key] = [...tabSeedData[key]];
+    let cancelled = false;
+
+    async function loadCanonicalAssumptions() {
+      if (!ctx.companyId) return;
+
+      const params = {
+        companyId: ctx.companyId,
+        scenarioId: ctx.scenarioId || undefined,
+        versionId: selectedScenario?.latestVersionId || undefined,
+      };
+
+      const [demandRes, costRes, fundingRes, wcRes] = await Promise.all([
+        getAssumptionsDemand(params),
+        getAssumptionsCost(params),
+        getAssumptionsFunding(params),
+        getAssumptionsWorkingCapital(params),
+      ]);
+
+      if (cancelled) return;
+
+      const nextRows: Record<string, any[]> = {};
+      for (const key of Object.keys(tabSeedData)) {
+        nextRows[key] = [...tabSeedData[key]];
+      }
+
+      let hasApiData = false;
+
+      function mapAssumptionRows(apiData: any[] | null, tabKey: string) {
+        if (apiData && Array.isArray(apiData) && apiData.length > 0) {
+          hasApiData = true;
+          nextRows[tabKey] = apiData.map((item: any, idx: number) => ({
+            id: item.fieldId || String(idx + 1),
+            name: item.name || `Field ${idx + 1}`,
+            current: String(item.value ?? ''),
+            prior: '',
+            delta: '',
+            confidence: typeof item.confidence === 'number' ? item.confidence : (item.confidence === 'high' ? 85 : item.confidence === 'medium' ? 65 : 45),
+            owner: item.source || '',
+            reviewDate: '',
+            evidence: '',
+            impact: '',
+          }));
+        }
+      }
+
+      mapAssumptionRows(demandRes.data, 'demand');
+      mapAssumptionRows(costRes.data, 'cost');
+      mapAssumptionRows(fundingRes.data, 'funding');
+      mapAssumptionRows(wcRes.data, 'wc');
+
+      setTabRows(nextRows);
+      setIsDirty(false);
+      setDataSource(hasApiData ? 'api' : 'static');
+      if (hasApiData) setLastFetched(new Date());
     }
-    setTabRows(nextRows);
-    setIsDirty(false);
-  }, [ctx.scenarioId]);
+
+    loadCanonicalAssumptions().catch(() => {
+      if (!cancelled) {
+        const nextRows: Record<string, any[]> = {};
+        for (const key of Object.keys(tabSeedData)) {
+          nextRows[key] = [...tabSeedData[key]];
+        }
+        setTabRows(nextRows);
+        setIsDirty(false);
+        setDataSource('static');
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [ctx.companyId, ctx.scenarioId, selectedScenario?.latestVersionId]);
 
   /* ── Row management ─────────────────────────────────────────────────── */
   const addRow = useCallback(() => {
@@ -395,28 +474,66 @@ export default function AssumptionsManager() {
     setIsSaving(true);
     setBanner(null);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (!ctx.companyId || !ctx.scenarioId) {
+        setBanner({ tone: 'warning', text: 'Select a company and scenario to save assumptions.' });
+        return;
+      }
+
+      const buildPayload = (tabKey: string) => {
+        const rows = tabRows[tabKey] || [];
+        return {
+          companyId: ctx.companyId!,
+          scenarioId: ctx.scenarioId,
+          fields: rows.map((r: any) => ({
+            name: r.name,
+            value: parseFloat(String(r.current).replace(/[^0-9.-]/g, '')) || 0,
+            unit: 'AED',
+            confidence: r.confidence >= 80 ? 'high' : r.confidence >= 60 ? 'medium' : 'low',
+          })),
+        };
+      };
+
+      await Promise.allSettled([
+        upsertAssumptionsDemandBulk(buildPayload('demand')),
+        upsertAssumptionsCostBulk(buildPayload('cost')),
+        upsertAssumptionsFundingBulk(buildPayload('funding')),
+        upsertAssumptionsWorkingCapitalBulk(buildPayload('wc')),
+      ]);
+
       setIsDirty(false);
-      setBanner({
-        tone: 'warning',
-        text: 'This assumptions workspace is still a pre-refactor preview. Draft edits are local to this browser session until canonical assumption writes are implemented.',
-      });
+      setDataSource('api');
+      setLastFetched(new Date());
     } catch (err: any) {
       setBanner({
         tone: 'error',
-        text: `Local draft save failed: ${err.message}`,
+        text: `Save failed: ${err.message}`,
       });
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  }, [ctx.companyId, ctx.scenarioId, tabRows]);
 
-  const handleRunEngine = useCallback(() => {
-    setBanner({
-      tone: 'warning',
-      text: 'Run Engine is intentionally disabled during pre-refactor stabilization. Use the canonical finance screens for live outputs while the assumptions orchestration is being migrated.',
-    });
-  }, []);
+  const handleRunEngine = useCallback(async () => {
+    if (!ctx.companyId || !ctx.scenarioId) {
+      setBanner({ tone: 'warning', text: 'Select a company and scenario to run the compute engine.' });
+      return;
+    }
+    setBanner(null);
+    try {
+      const result = await createComputeRuns({
+        companyId: ctx.companyId,
+        scenarioId: ctx.scenarioId,
+        versionId: selectedScenario?.latestVersionId,
+      });
+      if (result.data) {
+        setBanner({ tone: 'warning', text: `Compute run started: ${result.data.computeRunId} (status: ${result.data.status}). Check the finance screens for updated outputs.` });
+      } else {
+        setBanner({ tone: 'warning', text: result.error || 'Compute engine returned no result. The orchestration pipeline may still be initializing.' });
+      }
+    } catch (err: any) {
+      setBanner({ tone: 'error', text: `Compute run failed: ${err.message}` });
+    }
+  }, [ctx.companyId, ctx.scenarioId, selectedScenario?.latestVersionId]);
 
   return (
     <div className="flex-1 flex flex-col">
@@ -463,10 +580,12 @@ export default function AssumptionsManager() {
               <CheckCircle2 className="w-3.5 h-3.5" />
               {setInfo.approvalStatus}
             </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold bg-slate-500/20 text-slate-200 border border-slate-400/30">
-              <AlertCircle className="w-3.5 h-3.5" />
-              Preview Only
-            </div>
+            {dataSource !== 'api' && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-bold bg-slate-500/20 text-slate-200 border border-slate-400/30">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Local Data
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -500,8 +619,9 @@ export default function AssumptionsManager() {
               <Settings2 className="w-5 h-5 text-[#1E5B9C]" />
               {subTabs.find(t => t.key === activeTab)?.label} Assumptions
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Pre-refactor preview shell: edits are local-only until canonical assumption bindings and compute orchestration are migrated.
+            <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-3">
+              Assumption Manager — {dataSource === 'api' ? 'Live data from canonical API' : 'Local seed data (API unavailable)'}
+              <DataFreshness source={dataSource} lastFetched={lastFetched ? new Date(lastFetched) : null} />
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -511,15 +631,15 @@ export default function AssumptionsManager() {
               className="px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition font-medium text-xs flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
               <Save className="w-3.5 h-3.5" />
-              {isSaving ? 'Saving...' : 'Save Local Draft'}
+              {isSaving ? 'Saving...' : 'Save Draft'}
             </button>
             <button
               onClick={handleRunEngine}
               disabled={isSaving}
-              className="px-4 py-1.5 rounded-md bg-slate-400 hover:bg-slate-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              className="px-4 py-1.5 rounded-md bg-[#1B2A4A] hover:bg-[#263B5E] text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-white" />
-              Run Engine Pending Refactor
+              Run Compute Engine
             </button>
           </div>
         </div>

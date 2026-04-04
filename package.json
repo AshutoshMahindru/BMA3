@@ -1,0 +1,25 @@
+{
+  "name": "webapp",
+  "version": "1.0.0",
+  "description": "Full-stack financial projection engine for dark kitchen / cloud kitchen operations.",
+  "main": "api/src/server.ts",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.2",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
+    "typescript": "^6.0.2"
+  },
+  "scripts": {
+    "test": "jest --no-cache",
+    "test:golden": "jest tests/integration/compute-pipeline.test.ts --verbose",
+    "test:ci": "jest --no-cache --forceExit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
