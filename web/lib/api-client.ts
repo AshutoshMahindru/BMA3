@@ -80,10 +80,21 @@ async function request<T>(
 ): Promise<ApiResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const normalizedMethod = method.toUpperCase();
+  const treatBodyAsQuery =
+    (normalizedMethod === 'GET' || normalizedMethod === 'HEAD') &&
+    queryParams === undefined &&
+    body !== null &&
+    typeof body === 'object' &&
+    !Array.isArray(body);
+  const resolvedQueryParams = treatBodyAsQuery
+    ? (body as Record<string, string | number | boolean | undefined>)
+    : queryParams;
+  const resolvedBody = treatBodyAsQuery ? undefined : body;
 
   let url = `${API_BASE}${path}`;
-  if (queryParams) {
-    const qs = Object.entries(queryParams)
+  if (resolvedQueryParams) {
+    const qs = Object.entries(resolvedQueryParams)
       .filter(([, v]) => v !== undefined)
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
       .join('&');
@@ -98,7 +109,7 @@ async function request<T>(
         'Content-Type': 'application/json',
         'x-tenant-id': TENANT_ID,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: resolvedBody !== undefined ? JSON.stringify(resolvedBody) : undefined,
     });
     clearTimeout(timer);
 
@@ -460,16 +471,16 @@ export const getFinancialsBalanceSheet = (params?: { companyId: string; scenario
   request<{ periods: unknown[], lineItems: unknown[] }>('GET', '/financials/balance-sheet', params as Record<string, string | number | boolean | undefined>);
 
 /** GET /api/v1/financials/unit-economics — Unit economics breakdown for the selected context */
-export const getFinancialsUnitEconomics = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string; dimension?: string }): Promise<ApiResult<{ units: unknown[] }>> =>
-  request<{ units: unknown[] }>('GET', '/financials/unit-economics', params as Record<string, string | number | boolean | undefined>);
+export const getFinancialsUnitEconomics = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string; dimension?: string }): Promise<ApiResult<{ periods: unknown[], lineItems: unknown[] }>> =>
+  request<{ periods: unknown[], lineItems: unknown[] }>('GET', '/financials/unit-economics', params as Record<string, string | number | boolean | undefined>);
 
 /** GET /api/v1/financials/funding-summary — Funding summary including cash position, burn, runway, and events */
-export const getFinancialsFundingSummary = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string }): Promise<ApiResult<{ cashPosition: number, monthlyBurn: number, runway: number, fundingEvents: unknown[], totalRaised: number }>> =>
-  request<{ cashPosition: number, monthlyBurn: number, runway: number, fundingEvents: unknown[], totalRaised: number }>('GET', '/financials/funding-summary', params as Record<string, string | number | boolean | undefined>);
+export const getFinancialsFundingSummary = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string }): Promise<ApiResult<{ currentCash: number, runwayMonths: number, monthlyBurn: number, totalDebt: number, totalEquity: number, recommendedRaise: number }>> =>
+  request<{ currentCash: number, runwayMonths: number, monthlyBurn: number, totalDebt: number, totalEquity: number, recommendedRaise: number }>('GET', '/financials/funding-summary', params as Record<string, string | number | boolean | undefined>);
 
 /** GET /api/v1/financials/capital-strategy — Capital strategy view with return metrics and allocation */
-export const getFinancialsCapitalStrategy = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string }): Promise<ApiResult<{ capitalLadder: unknown[], returnMetrics: Record<string, unknown>, dilutionImpact: Record<string, unknown> }>> =>
-  request<{ capitalLadder: unknown[], returnMetrics: Record<string, unknown>, dilutionImpact: Record<string, unknown> }>('GET', '/financials/capital-strategy', params as Record<string, string | number | boolean | undefined>);
+export const getFinancialsCapitalStrategy = (params?: { companyId: string; scenarioId?: string; versionId?: string; periodId?: string; scopeRef?: string }): Promise<ApiResult<{ currentCash: number, monthlyBurn: number, runwayMonths: number, debtCapacity: number, dilutionEstimatePct: number, recommendedRaise: number, nextRaiseWindowMonths: number }>> =>
+  request<{ currentCash: number, monthlyBurn: number, runwayMonths: number, debtCapacity: number, dilutionEstimatePct: number, recommendedRaise: number, nextRaiseWindowMonths: number }>('GET', '/financials/capital-strategy', params as Record<string, string | number | boolean | undefined>);
 
 // ─────────────────────────────────────────────────────────────────────
 // ANALYSIS
