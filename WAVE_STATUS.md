@@ -51,6 +51,7 @@ original Wave 1-only state:
 ## File Generation Tracker
 
 ### Wave 1: Foundation (types + schemas + validation + API client)
+
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/types/entities.ts` | **DONE** | `canonical_schema.json` |
@@ -83,6 +84,7 @@ original Wave 1-only state:
 | `tests/integration/compute-pipeline.test.ts` | **DONE** | `test_fixtures.json` — 114/114 tests (Wave 2+3 combined) |
 
 ### Wave 3: Compute Nodes 8-14 (full DAG)
+
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/compute/nodes/capex-opex.ts` | **DONE** | node 8 — golden fixture verified |
@@ -94,6 +96,7 @@ original Wave 1-only state:
 | `api/src/compute/nodes/confidence.ts` | **DONE** | node 14 — DDL-aligned (dqi_scores, confidence_rollups) |
 
 ### Wave 4: Full Rewire (all APIs + all pages)
+
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/routes/v1/analysis.ts` | **DONE** | `api_contracts.json` — full: risk, simulation-runs, comparisons, explainability, sensitivity, alerts, portfolio |
@@ -113,6 +116,7 @@ original Wave 1-only state:
 | Fix `03-risk-seed.sql` UUID format | **DONE** | merged |
 
 ### Wave 5: Harden (auth, logging, tests, CI gate)
+
 | Target | Status | Generated From |
 |---|---|---|
 | `api/src/middleware/auth.ts` | **NOT_STARTED** | JWT |
@@ -193,3 +197,6 @@ Warnings still include:
 | 11 | 2026-04-04 | SpecOS maintenance follow-up | Tightened `specos/validate_specos.py` so required execution modes must be both declared in `supported_modes` and concretely defined, and so `status_lifecycle` always fails fast when missing or empty before schema-subset validation runs. | compliant, 0 failures |
 | 12 | 2026-04-04 | Wave 5 hardening follow-up | Replaced `api/src/server.ts` global error/startup `console.*` usage with shared Pino logging, removed redundant `@types/pino` from `api/package.json`, refreshed npm lockfiles, and re-verified that the root Jest script/package split was already correct while the existing `confidence_rollups` unique-constraint migration remained sufficient. | compliant, 0 failures |
 | 13 | 2026-04-04 | Wave 5 hardening follow-up | Hardened `api/src/compute/nodes/confidence.ts` by normalizing evidence references to canonical evidence-type keys before DQI scoring, and by switching DQI/confidence upserts to the named unique constraints added in migration `002`. Re-verified that `planning-spine.ts`, `scope-bundle.ts`, and the existing confidence-rollup uniqueness migration were already correct in this checkout. | compliant, 0 failures |
+| 14 | 2026-04-04 | Wave 5 hardening follow-up | Switched the golden compute integration suite from duplicated in-test arithmetic to the real orchestrator with a mocked DB harness, hardened `assertClose` with explicit finiteness checks, exported canonical confidence constants for drift-proof tests, and tightened decision overlap warnings so unresolved period IDs no longer create false positives. Also normalized markdownlint spacing in this tracker. | compliant, 0 failures |
+| 15 | 2026-04-04 | Wave 5 hardening follow-up | Scoped assumption-pack resolution to the active assumption set, fixed confidence rollups to use critical-only minimums, shared DQI scoring/upsert logic between pipeline and confidence routes, aligned decision rationale/dependency SQL with live tables, batched governance workflow-step loading and wrapped workflow/publication mutations in transactions with row-count checks, hardened scope dimension SQL, preserved assumption unit/period metadata in the dashboard save payload, kept markets freshness live on empty contexts, added real date-based market schedule parsing, and added migration `003` for `decision_rationales(decision_id)` upserts. Also moved shared route UUID validation to `z.string().uuid()` and added shared SpecOS-style error payload helpers. Verified with `npm test -- --runInBand`, `npm run build` in `api/`, `npm run build` in `web/`, and `python3 scripts/spec-compliance.py`. | compliant, 0 failures |
+| 16 | 2026-04-04 | Wave 5 hardening follow-up | Canonicalized the compute-layer assumption-pack and decision resolution queries to the SpecOS field names (`assumption_set_id`, `assumption_family`, `decision_family`, `decision_status`, `effective_from_period_id`) and added migration `004` to backfill those canonical columns on the compatibility tables used in local DBs. Also finished shared UUID validation reuse in `context.ts`, `assumptions.ts`, and `compute.ts`, then updated the integration harness to match the canonical SQL text. Re-verified with `npm test -- --runInBand`; the prior `api/` and `web/` builds plus `python3 scripts/spec-compliance.py` remain green on this patchset. | compliant, 0 failures |

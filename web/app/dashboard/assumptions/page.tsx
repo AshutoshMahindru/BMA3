@@ -67,6 +67,16 @@ function formatPanelDate(value: string | null | undefined) {
   }).format(date);
 }
 
+function parseNumericValue(value: unknown): number {
+  const numeric = Number.parseFloat(String(value ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 /* ── 8-Tab definitions with column schemas & seed data ────────────── */
 const subTabs = [
   { key: 'demand',    label: 'Demand' },
@@ -378,6 +388,7 @@ export default function AssumptionsManager() {
             id: item.fieldId || String(idx + 1),
             name: item.name || `Field ${idx + 1}`,
             current: String(item.value ?? ''),
+            rawValue: parseNumericValue(item.value ?? ''),
             prior: '',
             delta: '',
             confidence: typeof item.confidence === 'number' ? item.confidence : (item.confidence === 'high' ? 85 : item.confidence === 'medium' ? 65 : 45),
@@ -385,6 +396,10 @@ export default function AssumptionsManager() {
             reviewDate: '',
             evidence: '',
             impact: '',
+            unit: item.unit || '',
+            periodId: item.periodId || item.grainSignature?.period_id || '',
+            grainSignature: item.grainSignature || (item.periodId ? { period_id: item.periodId } : {}),
+            variableName: item.variableName || item.name || `Field ${idx + 1}`,
           }));
         }
       }
@@ -464,7 +479,10 @@ export default function AssumptionsManager() {
     /* Sync grid state back to tabRows */
     if (gridRef.current?.api) {
       const rows: any[] = [];
-      gridRef.current.api.forEachNode(node => rows.push(node.data));
+      gridRef.current.api.forEachNode((node) => rows.push({
+        ...node.data,
+        rawValue: parseNumericValue(node.data?.current),
+      }));
       setTabRows(prev => ({ ...prev, [activeTab]: rows }));
     }
   }, [activeTab]);
@@ -484,11 +502,15 @@ export default function AssumptionsManager() {
         return {
           companyId: ctx.companyId!,
           scenarioId: ctx.scenarioId,
-          fields: rows.map((r: any) => ({
-            name: r.name,
-            value: parseFloat(String(r.current).replace(/[^0-9.-]/g, '')) || 0,
-            unit: 'AED',
-            confidence: r.confidence >= 80 ? 'high' : r.confidence >= 60 ? 'medium' : 'low',
+          updates: rows.map((r: any) => ({
+            ...(isUuid(r.id) ? { fieldId: r.id } : {}),
+            variableName: r.variableName || r.name,
+            value: Number.isFinite(r.rawValue) ? r.rawValue : parseNumericValue(r.current),
+            unit: r.unit || undefined,
+            grainSignature: {
+              ...(r.grainSignature || {}),
+              ...(r.periodId ? { period_id: r.periodId } : {}),
+            },
           })),
         };
       };

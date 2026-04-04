@@ -54,13 +54,27 @@ interface AssumptionDQI {
 type ConfidenceBand = 'very_low' | 'low' | 'medium' | 'high' | 'very_high';
 type EvidenceTypeKey = keyof typeof EVIDENCE_TYPE_SCORES;
 
+export interface DqiDimensionScores {
+  sourceQualityScore: number;
+  freshnessScore: number;
+  completenessScore: number;
+  relevanceScore: number;
+  granularityScore: number;
+  consistencyScore: number;
+  traceabilityScore: number;
+}
+
+export interface DqiScoreResult extends DqiDimensionScores {
+  overallScore: number;
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /**
  * Evidence type base scores — derived from confidence model specifications.
  * NOT hardcoded constants in the model sense — these are the scoring rubric.
  */
-const EVIDENCE_TYPE_SCORES: Record<string, number> = {
+export const EVIDENCE_TYPE_SCORES: Record<string, number> = {
   market_research: 90,
   historical_data: 85,
   industry_benchmark: 75,
@@ -73,7 +87,7 @@ const EVIDENCE_TYPE_SCORES: Record<string, number> = {
  * DQI dimension weights (must sum to 1.0).
  * Source quality and freshness get highest weight.
  */
-const DQI_WEIGHTS = {
+export const DQI_WEIGHTS = {
   source_quality: 0.25,
   freshness: 0.20,
   completeness: 0.15,
@@ -82,6 +96,9 @@ const DQI_WEIGHTS = {
   consistency: 0.10,
   traceability: 0.05,
 };
+
+export const CRITICAL_PATH_MULTIPLIER = 5;
+export const CRITICAL_PATH_CAP = 25;
 
 /**
  * Map assumption variable names to assumption families for rollup.
@@ -127,7 +144,7 @@ const VARIABLE_FAMILY_MAP: Record<string, string> = {
 
 // ── Helper functions ─────────────────────────────────────────────────────────
 
-function mapScoreToBand(score: number): ConfidenceBand {
+export function mapScoreToBand(score: number): ConfidenceBand {
   if (score >= 85) return 'very_high';
   if (score >= 70) return 'high';
   if (score >= 50) return 'medium';
@@ -204,6 +221,61 @@ function normalizeEvidenceType(rawEvidenceType?: string | null, rawEvidenceRef?:
   }
 
   return 'unknown';
+}
+
+export function computeDqiScore(scores: DqiDimensionScores): DqiScoreResult {
+  return {
+    ...scores,
+    overallScore: Math.round(
+      scores.sourceQualityScore * DQI_WEIGHTS.source_quality +
+      scores.freshnessScore * DQI_WEIGHTS.freshness +
+      scores.completenessScore * DQI_WEIGHTS.completeness +
+      scores.relevanceScore * DQI_WEIGHTS.relevance +
+      scores.granularityScore * DQI_WEIGHTS.granularity +
+      scores.consistencyScore * DQI_WEIGHTS.consistency +
+      scores.traceabilityScore * DQI_WEIGHTS.traceability
+    ),
+  };
+}
+
+export async function upsertDqiScore(
+  entityType: string,
+  entityId: string,
+  scores: DqiScoreResult
+): Promise<void> {
+  await db.query(
+    `INSERT INTO dqi_scores
+       (dqi_score_id, entity_type, entity_id,
+        source_quality_score, freshness_score, completeness_score,
+        relevance_score, granularity_score, consistency_score, traceability_score,
+        overall_score, computed_at, created_at)
+     VALUES ($1, $2, $3,
+             $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+     ON CONFLICT ON CONSTRAINT uq_dqi_scores_entity
+     DO UPDATE SET
+       source_quality_score = $4,
+       freshness_score = $5,
+       completeness_score = $6,
+       relevance_score = $7,
+       granularity_score = $8,
+       consistency_score = $9,
+       traceability_score = $10,
+       overall_score = $11,
+       computed_at = NOW()`,
+    [
+      uuidv4(),
+      entityType,
+      entityId,
+      scores.sourceQualityScore,
+      scores.freshnessScore,
+      scores.completenessScore,
+      scores.relevanceScore,
+      scores.granularityScore,
+      scores.consistencyScore,
+      scores.traceabilityScore,
+      scores.overallScore,
+    ]
+  );
 }
 
 // ── Main execution ───────────────────────────────────────────────────────────
@@ -375,15 +447,16 @@ export async function executeConfidence(
     }
 
     // Compute weighted overall DQI score
-    const overallScore = Math.round(
-      sourceQualityScore * DQI_WEIGHTS.source_quality +
-      freshnessScore * DQI_WEIGHTS.freshness +
-      completenessScore * DQI_WEIGHTS.completeness +
-      relevanceScore * DQI_WEIGHTS.relevance +
-      granularityScore * DQI_WEIGHTS.granularity +
-      consistencyScore * DQI_WEIGHTS.consistency +
-      traceabilityScore * DQI_WEIGHTS.traceability
-    );
+    const scoreResult = computeDqiScore({
+      sourceQualityScore,
+      freshnessScore,
+      completenessScore,
+      relevanceScore,
+      granularityScore,
+      consistencyScore,
+      traceabilityScore,
+    });
+    const overallScore = scoreResult.overallScore;
 
     // EBITDA sensitivity weight (0-1, default 0.5 for variables not in tornado)
     const ebitdaWeight = sensitivityWeights[varName] ?? 0.5;
@@ -406,26 +479,7 @@ export async function executeConfidence(
     // Upsert DQI score to database
     // DDL: dqi_scores(dqi_score_id, entity_type, entity_id, source_quality_score, ..., overall_score, computed_at, created_at)
     if (entityId) {
-      await db.query(
-        `INSERT INTO dqi_scores
-           (dqi_score_id, entity_type, entity_id,
-            source_quality_score, freshness_score, completeness_score,
-            relevance_score, granularity_score, consistency_score, traceability_score,
-            overall_score, computed_at, created_at)
-         VALUES ($1, 'assumption_field', $2,
-                 $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
-         ON CONFLICT ON CONSTRAINT uq_dqi_scores_entity
-         DO UPDATE SET
-           source_quality_score = $3, freshness_score = $4, completeness_score = $5,
-           relevance_score = $6, granularity_score = $7, consistency_score = $8,
-           traceability_score = $9, overall_score = $10, computed_at = NOW()`,
-        [
-          uuidv4(), entityId,
-          sourceQualityScore, freshnessScore, completenessScore,
-          relevanceScore, granularityScore, consistencyScore, traceabilityScore,
-          overallScore,
-        ]
-      );
+      await upsertDqiScore('assumption_field', entityId, scoreResult);
     }
 
     // Upsert confidence assessment where none exists manually
@@ -496,7 +550,13 @@ export async function executeConfidence(
     const familyWeight = Math.max(...weights, 0.1);
 
     // Lowest critical score in this family
-    const lowestCritical = Math.min(...scores);
+    const criticalMembers = members.filter(
+      m => m.ebitda_sensitivity_weight > 0.7 && m.overall_score < 50
+    );
+    const criticalScores = criticalMembers.map((m) => m.overall_score);
+    const lowestCritical = criticalScores.length > 0
+      ? Math.min(...criticalScores)
+      : Math.min(...scores);
 
     familyRollups.push({
       family,
@@ -556,7 +616,10 @@ export async function executeConfidence(
   let criticalPathPenalty = 0;
   if (criticalLowDQI.length > 0) {
     // Penalty = 5 points per critical-low assumption, capped at 25
-    criticalPathPenalty = Math.min(criticalLowDQI.length * 5, 25);
+    criticalPathPenalty = Math.min(
+      criticalLowDQI.length * CRITICAL_PATH_MULTIPLIER,
+      CRITICAL_PATH_CAP
+    );
     overallConfidence = Math.max(0, overallConfidence - criticalPathPenalty);
   }
 

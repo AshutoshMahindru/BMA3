@@ -35,6 +35,40 @@ const GANTT_COLORS: Record<string, string> = {
 
 const QUARTERS = ['Q1\'26', 'Q2\'26', 'Q3\'26', 'Q4\'26', 'Q1\'27', 'Q2\'27', 'Q3\'27', 'Q4\'27', 'Q1\'28', 'Q2\'28', 'Q3\'28', 'Q4\'28'];
 
+function quarterIndexForDate(value: Date): number {
+  const quarter = Math.floor(value.getMonth() / 3);
+  return (value.getFullYear() - 2026) * 4 + quarter;
+}
+
+function parseSchedule(value: any): { start: number; duration: number; launchQ: string } | null {
+  const effectivePeriod = value?.effectivePeriod;
+  const parsedStart = new Date(
+    typeof effectivePeriod === 'object' && effectivePeriod !== null
+      ? effectivePeriod.start || value?.startDate || value?.effective_from || ''
+      : value?.startDate || effectivePeriod || '',
+  );
+
+  if (Number.isNaN(parsedStart.getTime())) {
+    return null;
+  }
+
+  const parsedEnd = new Date(
+    typeof effectivePeriod === 'object' && effectivePeriod !== null
+      ? effectivePeriod.end || value?.endDate || value?.effective_to || ''
+      : value?.endDate || effectivePeriod || '',
+  );
+
+  const start = Math.max(0, quarterIndexForDate(parsedStart));
+  const end = Number.isNaN(parsedEnd.getTime()) ? start : Math.max(start, quarterIndexForDate(parsedEnd));
+  const launchQ = `Q${Math.floor(parsedStart.getMonth() / 3) + 1}'${String(parsedStart.getFullYear()).slice(2)}`;
+
+  return {
+    start,
+    duration: Math.min(end - start + 1, Math.max(QUARTERS.length - start, 1)),
+    launchQ,
+  };
+}
+
 export default function MarketRolloutPlanner() {
   const ctx = usePlanningContext();
   const scenarioId = ctx.scenarioId || '';
@@ -49,7 +83,8 @@ export default function MarketRolloutPlanner() {
     if (!companyId) {
       setMarkets([]);
       setGanttData([]);
-      setSource('static');
+      setSource('api');
+      setLastFetched(new Date());
       return;
     }
 
@@ -60,23 +95,34 @@ export default function MarketRolloutPlanner() {
     });
 
     if (result.data && Array.isArray(result.data) && result.data.length > 0) {
-      const rows: MarketRow[] = result.data.map((d: any, idx: number) => ({
-        name: d.title || `Market ${idx + 1}`,
-        city: d.effectivePeriod || 'TBD',
-        status: d.status || 'draft',
-        statusColor: STATUS_COLORS[d.status] || STATUS_COLORS.draft,
-        launchQ: d.effectivePeriod ? `Q${Math.ceil(new Date(d.effectivePeriod).getMonth() / 3 + 1)}'${String(new Date(d.effectivePeriod).getFullYear()).slice(2)}` : 'TBD',
-        orders: '--',
-        revenue: '--',
-        margin: '--',
-      }));
+      const rows: MarketRow[] = result.data.map((d: any, idx: number) => {
+        const schedule = parseSchedule(d);
+        return {
+          name: d.title || `Market ${idx + 1}`,
+          city: typeof d.city === 'string'
+            ? d.city
+            : (typeof d.effectivePeriod === 'string' ? d.effectivePeriod : 'TBD'),
+          status: d.status || 'draft',
+          statusColor: STATUS_COLORS[d.status] || STATUS_COLORS.draft,
+          launchQ: schedule?.launchQ || 'TBD',
+          orders: '--',
+          revenue: '--',
+          margin: '--',
+        };
+      });
 
-      const gantt: GanttRow[] = rows.map((m, idx) => ({
-        kitchen: m.name,
-        start: idx % QUARTERS.length,
-        duration: Math.min(3 + idx, QUARTERS.length - (idx % QUARTERS.length)),
-        color: GANTT_COLORS[m.status] || GANTT_COLORS.draft,
-      }));
+      const gantt: GanttRow[] = result.data.flatMap((decision: any, idx: number) => {
+        const schedule = parseSchedule(decision);
+        if (!schedule) {
+          return [];
+        }
+        return [{
+          kitchen: rows[idx].name,
+          start: schedule.start,
+          duration: schedule.duration,
+          color: GANTT_COLORS[rows[idx].status] || GANTT_COLORS.draft,
+        }];
+      });
 
       setMarkets(rows);
       setGanttData(gantt);
@@ -85,8 +131,8 @@ export default function MarketRolloutPlanner() {
     } else {
       setMarkets([]);
       setGanttData([]);
-      setSource('static');
-      setLastFetched(null);
+      setSource('api');
+      setLastFetched(new Date());
     }
   }, [companyId, scenarioId]);
 

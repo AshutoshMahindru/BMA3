@@ -3,11 +3,9 @@ import { db } from '../../db';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { idSchema } from './_shared';
 
 const router = Router();
-
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
 
 const ValidationCreateBody = z.object({
   companyId: idSchema,

@@ -3,11 +3,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
 import { validate, validateParams, validateQuery } from '../../middleware/validate';
+import { idSchema, meta, traceId } from './_shared';
 
 const router = Router();
-
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
 
 const DecisionListQuery = z.object({
   companyId: idSchema,
@@ -50,17 +48,6 @@ const LinkBody = z.object({
 const SequenceBody = z.object({
   sequencePosition: z.number().int().min(0),
 });
-
-function traceId(req: Request): string {
-  return (req.headers['x-trace-id'] as string) || 'no-trace-id';
-}
-
-function meta(extra?: Record<string, unknown>) {
-  return {
-    freshness: { source: 'database', timestamp: new Date().toISOString() },
-    ...(extra || {}),
-  };
-}
 
 /**
  * List decisions filtered by family (product, market, marketing, operations).
@@ -241,7 +228,7 @@ router.get('/:decisionId/rationale', validateParams(DecisionIdParam), async (req
   try {
     const { decisionId } = req.params as z.infer<typeof DecisionIdParam>;
     const { rows } = await db.query(
-      `SELECT dr.rationale_summary, dr2.rationale_text, dr2.evidence_refs
+      `SELECT dr.rationale_summary, dr2.summary, dr2.evidence_ref
          FROM decision_records dr
          LEFT JOIN decision_rationales dr2 ON dr2.decision_id = dr.id
         WHERE dr.id::text = $1 AND dr.is_deleted = FALSE
@@ -252,11 +239,23 @@ router.get('/:decisionId/rationale', validateParams(DecisionIdParam), async (req
       return res.status(404).json({ error: { code: 'DECISION_NOT_FOUND', message: `Decision ${decisionId} not found`, trace_id: traceId(req) } });
     }
     const r = rows[0];
+    let evidenceRefs: string[] = [];
+    if (typeof r.evidence_ref === 'string' && r.evidence_ref.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(r.evidence_ref);
+        evidenceRefs = Array.isArray(parsed)
+          ? parsed.filter((item): item is string => typeof item === 'string' && item.length > 0)
+          : [r.evidence_ref];
+      } catch {
+        evidenceRefs = [r.evidence_ref];
+      }
+    }
+
     res.json({
       data: {
         decisionId,
-        rationale: r.rationale_text || r.rationale_summary || '',
-        evidenceRefs: r.evidence_refs ? (Array.isArray(r.evidence_refs) ? r.evidence_refs : []) : [],
+        rationale: r.summary || r.rationale_summary || '',
+        evidenceRefs,
         createdAt: new Date().toISOString(),
       },
       meta: meta(),
@@ -269,6 +268,9 @@ router.post('/:decisionId/rationale', validateParams(DecisionIdParam), validate(
   try {
     const { decisionId } = req.params as z.infer<typeof DecisionIdParam>;
     const { rationale, evidenceRefs } = req.body as z.infer<typeof RationaleBody>;
+    const serializedEvidenceRef = (evidenceRefs || []).length <= 1
+      ? (evidenceRefs || [])[0] || null
+      : JSON.stringify(evidenceRefs);
 
     const dr = await db.query(`SELECT id FROM decision_records WHERE id::text = $1 AND is_deleted = FALSE`, [decisionId]);
     if (Number(dr.rowCount || 0) === 0) {
@@ -276,10 +278,10 @@ router.post('/:decisionId/rationale', validateParams(DecisionIdParam), validate(
     }
 
     await db.query(
-      `INSERT INTO decision_rationales (id, decision_id, rationale_text, evidence_refs)
-       VALUES ($1, $2::uuid, $3, $4::jsonb)
-       ON CONFLICT (decision_id) DO UPDATE SET rationale_text = $3, evidence_refs = $4::jsonb`,
-      [crypto.randomUUID(), decisionId, rationale, JSON.stringify(evidenceRefs || [])],
+      `INSERT INTO decision_rationales (id, decision_id, summary, evidence_ref)
+       VALUES ($1, $2::uuid, $3, $4)
+       ON CONFLICT (decision_id) DO UPDATE SET summary = $3, evidence_ref = $4`,
+      [crypto.randomUUID(), decisionId, rationale, serializedEvidenceRef],
     );
 
     await db.query(`UPDATE decision_records SET rationale_summary = $1, updated_at = NOW() WHERE id::text = $2`, [rationale.slice(0, 500), decisionId]);
@@ -293,14 +295,14 @@ router.get('/:decisionId/links', validateParams(DecisionIdParam), async (req: Re
   try {
     const { decisionId } = req.params as z.infer<typeof DecisionIdParam>;
     const { rows } = await db.query(
-      `SELECT dd.id, dd.source_decision_id, dd.target_decision_id, dd.dependency_type
+      `SELECT dd.id, dd.decision_id, dd.depends_on_decision_id, dd.dependency_type
          FROM decision_dependencies dd
-        WHERE dd.source_decision_id::text = $1 OR dd.target_decision_id::text = $1
+        WHERE dd.decision_id::text = $1 OR dd.depends_on_decision_id::text = $1
         ORDER BY dd.created_at ASC`,
       [decisionId],
     );
     res.json({
-      data: rows.map((r: any) => ({ linkId: r.id, sourceDecisionId: r.source_decision_id, targetDecisionId: r.target_decision_id, linkType: r.dependency_type || 'depends_on' })),
+      data: rows.map((r: any) => ({ linkId: r.id, sourceDecisionId: r.decision_id, targetDecisionId: r.depends_on_decision_id, linkType: r.dependency_type || 'depends_on' })),
       meta: meta(),
     });
   } catch (error) { next(error); }
@@ -313,7 +315,7 @@ router.post('/:decisionId/links', validateParams(DecisionIdParam), validate(Link
     const { targetDecisionId, linkType } = req.body as z.infer<typeof LinkBody>;
     const id = crypto.randomUUID();
     await db.query(
-      `INSERT INTO decision_dependencies (id, source_decision_id, target_decision_id, dependency_type)
+      `INSERT INTO decision_dependencies (id, decision_id, depends_on_decision_id, dependency_type)
        VALUES ($1, $2::uuid, $3::uuid, $4)`,
       [id, decisionId, targetDecisionId, linkType],
     );

@@ -2,13 +2,11 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
+import { idSchema, uuidSchema } from './_shared';
 
 const router = Router();
 
 const DEFAULT_TENANT_ID = '10000000-0000-4000-8000-000000000001';
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
 
 const CompanyCreateBody = z.object({
   name: z.string().min(1),
@@ -66,7 +64,7 @@ function traceId(req: Request): string {
 
 function tenantId(req: Request): string {
   const value = req.headers['x-tenant-id'] as string | undefined;
-  return value && ID_PATTERN.test(value) ? value : DEFAULT_TENANT_ID;
+  return value && uuidSchema.safeParse(value).success ? value : DEFAULT_TENANT_ID;
 }
 
 function meta(extra?: Record<string, unknown>) {

@@ -159,38 +159,21 @@ export async function executeAssumptionPacks(
 
   const assumptions = new ResolvedAssumptions();
 
-  // ── Step 1: Load assumption packs bound to active decision state ────────
-  // First, find the assumption set / packs for this scenario
-  // DDL: assumption_packs has columns: id, company_id, assumption_set_id, family, name, status, ...
-  // No scenario_id column — packs are linked to scenarios via assumption_sets or scope_bundles.
-  // We filter by company_id and status; scenario binding is through the assumption_set.
+  // ── Step 1: Load assumption packs bound to the active assumption set ────
+  // The compute context always carries an assumption_set_id. Restricting pack
+  // resolution to that set prevents unrelated active packs for the same
+  // company from shadowing the scenario-specific bindings we actually want.
   const packsResult = await db.query(
-    `SELECT ap.id AS pack_id, ap.name, ap.family, ap.status
+    `SELECT ap.id AS pack_id
      FROM assumption_packs ap
      WHERE ap.company_id = $1
        AND ap.status = 'active'
-     ORDER BY ap.family, ap.created_at DESC`,
-    [ctx.company_id]
+       AND ap.assumption_set_id = $2
+     ORDER BY ap.assumption_family, ap.created_at DESC`,
+    [ctx.company_id, ctx.assumption_set_id]
   );
 
   const packIds = packsResult.rows.map((r: any) => r.pack_id);
-
-  // If a specific assumption_set_id was provided, also include its bindings
-  if (ctx.assumption_set_id) {
-    const setBindingsResult = await db.query(
-      `SELECT DISTINCT ap.id AS pack_id
-       FROM assumption_packs ap
-       JOIN assumption_pack_bindings apb ON ap.id = apb.pack_id
-       WHERE apb.assumption_set_id = $1
-         AND ap.status = 'active'`,
-      [ctx.assumption_set_id]
-    );
-    for (const row of setBindingsResult.rows) {
-      if (!packIds.includes(row.pack_id)) {
-        packIds.push(row.pack_id);
-      }
-    }
-  }
 
   // ── Step 2-7: Load all field bindings with inheritance chain ────────────
   // Query assumption_field_bindings for all relevant packs
@@ -211,7 +194,8 @@ export async function executeAssumptionPacks(
       [packIds]
     );
   } else {
-    // Fallback: try loading bindings directly by company + scenario context
+    // Fallback: keep the same assumption-set boundary even when the initial
+    // pack lookup returned no active packs.
     bindingsResult = await db.query(
       `SELECT afb.variable_name,
               afb.grain_signature,
@@ -222,9 +206,10 @@ export async function executeAssumptionPacks(
        FROM assumption_field_bindings afb
        JOIN assumption_packs ap ON ap.id = afb.pack_id
        WHERE ap.company_id = $1
+         AND ap.assumption_set_id = $2
          AND ap.status = 'active'
        ORDER BY afb.is_override DESC, afb.created_at DESC`,
-      [ctx.company_id]
+      [ctx.company_id, ctx.assumption_set_id]
     );
   }
 
@@ -235,12 +220,16 @@ export async function executeAssumptionPacks(
   for (const binding of bindingsResult.rows) {
     const varName = binding.variable_name;
 
-    // DDL: value column is NUMERIC — comes back as number or string from pg.
+    // Canonical bindings may arrive as a scalar numeric or a structured JSON value.
     let numericValue = 0;
     if (binding.value !== null && binding.value !== undefined) {
-      numericValue = typeof binding.value === 'number'
-        ? binding.value
-        : parseFloat(String(binding.value));
+      const rawValue = typeof binding.value === 'object' && binding.value !== null
+        ? (binding.value.value ?? binding.value.numeric ?? binding.value.amount ?? 0)
+        : binding.value;
+
+      numericValue = typeof rawValue === 'number'
+        ? rawValue
+        : parseFloat(String(rawValue));
     }
 
     if (isNaN(numericValue)) {
