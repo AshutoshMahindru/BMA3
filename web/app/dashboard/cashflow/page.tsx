@@ -45,8 +45,8 @@ export default function CashflowConsole() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { const h=['Line Item','Q1','Q2','Q3','Q4','FY']; const r=cfData.filter(x=>!x.section).map(x=>[x.label,x.q1,x.q2,x.q3,x.q4,x.fy]); exportCSV('CashFlow',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>
-          <button onClick={() => { const h=['Line Item','Q1','Q2','Q3','Q4','FY']; const r=cfData.filter(x=>!x.section).map(x=>[x.label,x.q1,x.q2,x.q3,x.q4,x.fy]); exportPDF('Cash Flow Statement',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"><Printer className="w-3.5 h-3.5" /> PDF</button>
+          <button onClick={() => { const h=['Line Item','Q1','Q2','Q3','Q4','FY']; const r=cfData.filter(x=>!x.section).map(x=>[x.label,x.q1??0,x.q2??0,x.q3??0,x.q4??0,x.fy??0]); exportCSV('CashFlow',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"><Download className="w-3.5 h-3.5" /> CSV</button>
+          <button onClick={() => { const h=['Line Item','Q1','Q2','Q3','Q4','FY']; const r=cfData.filter(x=>!x.section).map(x=>[x.label,x.q1??0,x.q2??0,x.q3??0,x.q4??0,x.fy??0]); exportPDF('Cash Flow Statement',h,r); }} className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"><Printer className="w-3.5 h-3.5" /> PDF</button>
         </div>
       </div>
 
@@ -99,9 +99,9 @@ export default function CashflowConsole() {
                       </td>
                       {[row.q1, row.q2, row.q3, row.q4, row.fy].map((val, vIdx) => (
                         <td key={vIdx} className={`px-4 py-2.5 text-right font-mono ${
-                          row.bold ? 'font-bold text-[#1B2A4A]' : val < 0 ? 'text-[#C0392B]' : 'text-gray-700'
+                          row.bold ? 'font-bold text-[#1B2A4A]' : (val ?? 0) < 0 ? 'text-[#C0392B]' : 'text-gray-700'
                         } ${vIdx === 4 ? 'bg-gray-50/50 font-bold' : ''}`}>
-                          {fmt(val)}
+                          {fmt(val ?? 0)}
                         </td>
                       ))}
                     </tr>
