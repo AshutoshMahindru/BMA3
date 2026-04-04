@@ -298,9 +298,11 @@ const confidenceRollups = [
 ];
 
 const assumptionBindingRows = [
-  { id: '77000000-0000-4000-8000-000000000111', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'avg_order_value', current_value: 64, unit: 'AED', evidence_ref: 'market_research', family: 'demand', pack_name: 'Demand Core' },
+  { id: '77000000-0000-4000-8000-000000000111', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'average_order_value', current_value: 64, unit: 'currency', evidence_ref: 'market_research', family: 'demand', pack_name: 'Demand Core' },
   { id: '77000000-0000-4000-8000-000000000112', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'conversion_rate', current_value: 0.24, unit: 'ratio', evidence_ref: 'historical_data', family: 'demand', pack_name: 'Demand Core' },
-  { id: '77000000-0000-4000-8000-000000000113', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'food_cost_pct', current_value: 0.31, unit: 'ratio', evidence_ref: 'industry_benchmark', family: 'cost', pack_name: 'Cost Guardrails' },
+  { id: '77000000-0000-4000-8000-000000000113', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'cogs_per_unit', current_value: 19.5, unit: 'currency', evidence_ref: 'industry_benchmark', family: 'cost', pack_name: 'Cost Guardrails' },
+  { id: '77000000-0000-4000-8000-000000000114', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'equity_inflows', current_value: 2500000, unit: 'currency', evidence_ref: 'board_plan', family: 'funding', pack_name: 'Funding Plan' },
+  { id: '77000000-0000-4000-8000-000000000115', company_id: companyId, assumption_set_id: versions[0].assumption_set_id, variable_name: 'receivables_days', current_value: 14, unit: 'days', evidence_ref: 'platform_terms', family: 'working-capital', pack_name: 'Working Capital Guardrails' },
 ];
 
 const researchTasks = [
@@ -433,6 +435,17 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
   if (sql.includes('SELECT s.company_id FROM scenarios s') && sql.includes('c.tenant_id::text = $2')) {
     const scenario = scenarios.find((row) => row.id === String(params[0]) && row.tenant_id === String(params[1]));
     return scenario ? result([{ company_id: scenario.company_id }]) : result();
+  }
+
+  if (sql.includes('SELECT pv.company_id, pv.scenario_id, pv.assumption_set_id') && sql.includes('FROM plan_versions pv') && sql.includes('c.tenant_id::text = $2')) {
+    const version = versions.find((row) => row.id === String(params[0]) && row.tenant_id === String(params[1]));
+    return version
+      ? result([{
+          company_id: version.company_id,
+          scenario_id: version.scenario_id,
+          assumption_set_id: version.assumption_set_id,
+        }])
+      : result();
   }
 
   if (sql.includes('SELECT pv.id, pv.company_id, pv.scenario_id, pv.assumption_set_id, pv.status, pv.is_frozen') && sql.includes('c.tenant_id::text = $2')) {
@@ -574,20 +587,41 @@ async function mockQuery(sqlText: string, params: unknown[] = []): Promise<RowRe
 
   if (sql.includes('FROM assumption_field_bindings afb') && sql.includes('JOIN assumption_packs ap')) {
     const companyFilter = String(params[0]);
-    const assumptionSetId = params[1] ? String(params[1]) : null;
+    const assumptionSetId = typeof params[2] === 'string'
+      ? String(params[2])
+      : typeof params[1] === 'string'
+        ? String(params[1])
+        : null;
+    const variableFilter = Array.isArray(params[1])
+      ? params[1].map(String)
+      : Array.isArray(params[2])
+        ? params[2].map(String)
+        : [];
     const rows = assumptionBindingRows
       .filter((row) => row.company_id === companyFilter)
       .filter((row) => !assumptionSetId || row.assumption_set_id === assumptionSetId)
+      .filter((row) => variableFilter.length === 0 || variableFilter.includes(row.variable_name))
       .map((row) => ({
         id: row.id,
         variable_name: row.variable_name,
-        current_value: row.current_value,
+        value: row.current_value,
         unit: row.unit,
         evidence_ref: row.evidence_ref,
         family: row.family,
         pack_name: row.pack_name,
       }));
     return result(rows);
+  }
+
+  if (sql.includes('SELECT aset.id') && sql.includes('FROM assumption_sets aset') && sql.includes('JOIN scenarios s ON s.id = aset.scenario_id')) {
+    const companyFilter = String(params[0]);
+    const scenarioFilter = String(params[1]);
+    const matchingSetId = assumptionSets.get(scenarioFilter) || null;
+    if (!matchingSetId) {
+      return result();
+    }
+    const scenario = scenarios.find((row) => row.id === scenarioFilter && row.company_id === companyFilter);
+    return scenario ? result([{ id: matchingSetId }]) : result();
   }
 
   if (sql.includes('SELECT id, status, trigger_type, created_at, completed_at FROM compute_runs') && sql.includes('WHERE company_id::text = $1')) {

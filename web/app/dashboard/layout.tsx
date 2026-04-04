@@ -29,7 +29,11 @@ const navGroups = [
   },
   { key: 'assumptions', label: 'Assumptions',    icon: Settings2,       href: '/dashboard/assumptions',
     children: [
-      { label: 'Demand Assumptions',    href: '/dashboard/assumptions' },
+      { label: 'Assumptions Overview',  href: '/dashboard/assumptions' },
+      { label: 'Demand Assumptions',    href: '/dashboard/assumptions/demand' },
+      { label: 'Cost Assumptions',      href: '/dashboard/assumptions/cost' },
+      { label: 'Funding Assumptions',   href: '/dashboard/assumptions/funding' },
+      { label: 'Working Capital Assumptions', href: '/dashboard/assumptions/working-capital' },
       { label: 'Confidence Tracker',    href: '/dashboard/confidence' },
       { label: 'Scope Review',          href: '/dashboard/scope/review' },
     ]

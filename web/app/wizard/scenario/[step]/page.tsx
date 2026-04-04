@@ -35,7 +35,7 @@ const WIZARD_STEPS: Array<{
   { key: 'context', label: 'Context', description: 'Confirm company context and baseline scenario inheritance.', actionHref: '/dashboard/analysis/compare' },
   { key: 'scope', label: 'Scope', description: 'Move into the live dimension editors to refine planning scope.', actionHref: '/dashboard/scope/formats' },
   { key: 'decisions', label: 'Decisions', description: 'Capture market, product, marketing, and operations decisions.', actionHref: '/dashboard/decisions' },
-  { key: 'assumptions', label: 'Assumptions', description: 'Refine the live assumptions tables and confidence inputs.', actionHref: '/dashboard/assumptions' },
+  { key: 'assumptions', label: 'Assumptions', description: 'Refine the live assumptions tables and confidence inputs.', actionHref: '/dashboard/assumptions/demand' },
   { key: 'compute', label: 'Compute', description: 'Trigger the compute engine on the newly created version.' },
   { key: 'review', label: 'Review', description: 'Inspect comparison outputs before governance actions.', actionHref: '/dashboard/analysis/compare' },
   { key: 'publish', label: 'Publish', description: 'Publish the version once the working draft is ready.', actionHref: '/dashboard/governance' },
@@ -394,7 +394,7 @@ export default function ScenarioWizardPage({ params }: { params: { step: string 
                     Adjust demand, cost, funding, and working-capital assumptions on the live dashboard page. This keeps the wizard draft aligned with the real tables and compute trigger flow.
                   </p>
                   <div className="flex flex-wrap gap-3">
-                    <Link href="/dashboard/assumptions" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-[#1E5B9C]/30 hover:text-[#1E5B9C]">Open Assumptions</Link>
+                    <Link href="/dashboard/assumptions" className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:border-[#1E5B9C]/30 hover:text-[#1E5B9C]">Open Assumptions Overview</Link>
                     <Link href={buildHref('compute', queryState)} className="rounded-xl bg-[#10233F] px-4 py-2 text-sm font-semibold text-white hover:bg-[#17315A]">Continue to Compute</Link>
                   </div>
                 </div>

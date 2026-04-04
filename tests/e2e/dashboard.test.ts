@@ -1,5 +1,21 @@
 import { test, expect } from '@playwright/test';
 
+test('loads the assumptions overview route', async ({ page }) => {
+  await page.goto('/dashboard/assumptions');
+
+  await expect(page.getByRole('heading', { name: 'Assumptions Overview' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Demand Assumptions' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Funding Assumptions' })).toBeVisible();
+});
+
+test('loads a canonical assumptions family surface', async ({ page }) => {
+  await page.goto('/dashboard/assumptions/demand');
+
+  await expect(page.getByRole('heading', { name: 'Demand Assumptions', level: 1 })).toBeVisible();
+  await expect(page.getByText('Average Order Value')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Missing Field' })).toBeVisible();
+});
+
 test('loads the canonical scenario comparison console', async ({ page }) => {
   await page.goto('/dashboard/analysis/compare');
 

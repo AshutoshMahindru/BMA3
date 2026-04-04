@@ -31,16 +31,37 @@ services:
       retries: 20
     restart: unless-stopped
 
+  migrator:
+    image: node:20-alpine
+    container_name: fpe-migrator
+    working_dir: /workspace
+    command: sh -lc "npm ci && npm --prefix api ci && npm run migrate:up"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: fpe_db
+      DB_USER: fpe_admin
+      DB_PASSWORD: fpe_password
+      DATABASE_URL: postgres://fpe_admin:fpe_password@postgres:5432/fpe_db
+    volumes:
+      - ./:/workspace
+      - root_node_modules:/workspace/node_modules
+      - api_node_modules:/workspace/api/node_modules
+    restart: "no"
+
   api:
     image: node:20-alpine
     container_name: fpe-api
     working_dir: /workspace/api
     command: sh -lc "npm ci && npm run dev"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -65,10 +86,10 @@ services:
     working_dir: /workspace/api
     command: sh -lc "npm ci && npm run worker"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
@@ -103,6 +124,7 @@ services:
 
 volumes:
   pgdata:
+  root_node_modules:
   api_node_modules:
   worker_node_modules:
   web_node_modules:

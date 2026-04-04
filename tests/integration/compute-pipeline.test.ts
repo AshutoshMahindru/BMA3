@@ -293,6 +293,10 @@ class MockRuntime {
     store[bucket][metricName] = value;
   }
 
+  private countMetrics(store: MetricStore): number {
+    return Object.values(store).reduce((sum, bucket) => sum + Object.keys(bucket).length, 0);
+  }
+
   async query(sql: string, params: any[] = []) {
     const q = sql.replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -436,8 +440,34 @@ class MockRuntime {
       || q.startsWith('delete from balance_sheet_projections')
       || q.startsWith('delete from unit_economics_projections')
       || q.startsWith('delete from kpi_projections')
+      || q.startsWith('delete from compute_run_artifacts')
+      || q.startsWith('delete from compute_dependency_snapshots')
     ) {
       return this.result([]);
+    }
+
+    if (q === 'select count(*)::int as count from pnl_projections where compute_run_id::text = $1') {
+      return this.result([{ count: this.countMetrics(this.pnlProjections) }]);
+    }
+
+    if (q === 'select count(*)::int as count from cashflow_projections where compute_run_id::text = $1') {
+      return this.result([{ count: this.countMetrics(this.cashflowProjections) }]);
+    }
+
+    if (q === 'select count(*)::int as count from balance_sheet_projections where compute_run_id::text = $1') {
+      return this.result([{ count: this.countMetrics(this.balanceSheetProjections) }]);
+    }
+
+    if (q === 'select count(*)::int as count from unit_economics_projections where compute_run_id::text = $1') {
+      return this.result([{ count: this.countMetrics(this.unitEconomicsProjections) }]);
+    }
+
+    if (q === 'select count(*)::int as count from kpi_projections where compute_run_id::text = $1') {
+      return this.result([{ count: this.countMetrics(this.kpiProjections) }]);
+    }
+
+    if (q === 'select count(*)::int as count from driver_explainability where compute_run_id::text = $1') {
+      return this.result([{ count: 0 }]);
     }
 
     if (q.startsWith('insert into pnl_projections')) {
@@ -466,11 +496,16 @@ class MockRuntime {
     }
 
     if (q.startsWith('insert into compute_run_artifacts')) {
+      const legacyShape = params.length >= 6;
       this.artifacts.push({
-        artifact_type: params[2],
-        artifact_ref: params[3],
-        row_count: params[4],
-        metadata: JSON.parse(params[5]),
+        artifact_type: legacyShape ? params[2] : params[1],
+        artifact_ref: legacyShape ? params[3] : '',
+        row_count: legacyShape ? params[4] : params[2],
+        metadata: legacyShape
+          ? JSON.parse(params[5])
+          : params[3]
+            ? JSON.parse(params[3])
+            : {},
       });
       return this.result([]);
     }

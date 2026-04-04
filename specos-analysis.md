@@ -8,7 +8,7 @@
 | `/api/v1/reference` router | Missing | **Implemented** — `reference.ts`, all 8 endpoints live and registered |
 | `/api/v1/ai` router | Missing | **Implemented** — `ai.ts`, all 4 advisory endpoints live and registered |
 | Test count | 117 | **123** (+6 contract/integration tests on top of earlier route coverage) |
-| Playwright dashboard smoke | **3/3** | **7/7** (scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, wizard) |
+| Playwright dashboard smoke | **3/3** | **9/9** (assumptions overview, assumptions family surface, scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, wizard) |
 | AI SME overlays | Missing | **Implemented** — advisory overlays live in `executive/page.tsx` and `pnl/page.tsx` |
 | Compliant code routes | 107 | **114** |
 
@@ -21,7 +21,7 @@
 | `spec-compliance.py` | **COMPLIANT** — 9/9, 0 warnings, 0 failures |
 | `specos/validate_specos.py` | **PASS** — 0 errors, 0 warnings |
 | Jest suite | **123/123 passing** |
-| Playwright E2E | **7/7 passing** |
+| Playwright E2E | **9/9 passing** |
 | Wave status | Wave 5 **DONE** — compose-hosted runtime verified |
 
 ---
@@ -48,7 +48,7 @@ Route-count and core route behavior are now aligned across the assumptions surfa
 
 ---
 
-## Frontend: 26 dashboard pages plus root landing page
+## Frontend: canonical dashboard routes aligned
 
 Several earlier “mismatches” are now explicit canonical `dashboard_path` mappings in SpecOS, so they should be treated as aligned rather than drift.
 
@@ -75,11 +75,15 @@ Several earlier “mismatches” are now explicit canonical `dashboard_path` map
 | `capital-strategy` | `capital/` | Canonical path resolves via `web/next.config.mjs` rewrite |
 | `simulation` | `simulations/` | Canonical path resolves via `web/next.config.mjs` rewrite |
 
-### Remaining frontend gaps
+### Assumptions surfaces now routed canonically
 
-| Gap type | Surface |
-|---|---|
-| Consolidated into one tabbed page | Demand / Cost / Funding / Working Capital assumptions live inside `assumptions/page.tsx` |
+| Surface | Route | Status |
+|---|---|---|
+| Assumptions Overview | `/dashboard/assumptions` | Live |
+| Demand Assumptions | `/dashboard/assumptions/demand` | Live |
+| Cost Assumptions | `/dashboard/assumptions/cost` | Live |
+| Funding Assumptions | `/dashboard/assumptions/funding` | Live |
+| Working Capital Assumptions | `/dashboard/assumptions/working-capital` | Live |
 
 ---
 
@@ -108,7 +112,7 @@ The real orchestrator runs in the integration suite, and the live async queue pa
 | Item | Status |
 |---|---|
 | `db/migrations/` tooling (node-pg-migrate) | **DONE** — root scripts + `scripts/migrate.mjs` + baseline scaffold |
-| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, and wizard smoke flows |
+| `tests/e2e/dashboard.test.ts` (Playwright) | **DONE** — assumptions overview, assumptions family route, scenario compare, scope editors, scope review, compute center, executive AI SME, P&L AI SME, and wizard smoke flows |
 | Full `docker-compose` stack (Redis, worker) | **DONE** — `docker compose up -d` boots Postgres + Redis + API + worker + web locally; a compose-hosted queued compute run completes all 18 steps |
 
 ---

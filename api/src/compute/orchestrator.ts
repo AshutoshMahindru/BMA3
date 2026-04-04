@@ -31,6 +31,7 @@ import { executeCapexOpex } from './nodes/capex-opex';
 import { executeWorkingCapital } from './nodes/working-capital';
 import { executeBurnRunway } from './nodes/burn-runway';
 import { executeBalanceSheet } from './nodes/balance-sheet';
+import { projectionCountsByRun, replaceRunArtifacts } from './run-artifacts';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -395,6 +396,8 @@ export async function executeComputePipeline(ctx: ComputeContext): Promise<Pipel
       [ctx.run_id, runConfig],
     );
     await db.query(`DELETE FROM compute_run_steps WHERE compute_run_id = $1`, [ctx.run_id]);
+    await db.query(`DELETE FROM compute_run_artifacts WHERE compute_run_id = $1`, [ctx.run_id]);
+    await db.query(`DELETE FROM compute_dependency_snapshots WHERE compute_run_id = $1`, [ctx.run_id]);
   }
 
   let pipelineFailed = false;
@@ -467,13 +470,25 @@ export async function executeComputePipeline(ctx: ComputeContext): Promise<Pipel
       `Compute pipeline failed at step ${failedStep?.step} (${failedStep?.node_id}): ${failureError?.message}`
     );
   } else {
+    const outputCounts = await projectionCountsByRun(ctx.run_id);
+    await replaceRunArtifacts({
+      runId: ctx.run_id,
+      companyId: ctx.company_id,
+      scenarioId: ctx.scenario_id,
+      versionId: ctx.version_id,
+      assumptionSetId: ctx.assumption_set_id,
+      scopeBundleId: state.scope_bundle?.scope_bundle_id || null,
+      counts: outputCounts,
+    });
+
     await db.query(
       `UPDATE compute_runs
        SET status = 'completed',
+           metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
            completed_at = NOW(),
            updated_at = NOW()
        WHERE id = $1`,
-      [ctx.run_id]
+      [ctx.run_id, JSON.stringify({ outputCounts })]
     );
   }
 
