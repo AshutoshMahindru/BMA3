@@ -282,12 +282,18 @@ if os.path.exists(server_path):
                 server_has_active = True
     other_importers = [f for f in jobs_importers if 'server.ts' not in f]
 
+    jobs_dir = os.path.join(REPO_ROOT, 'api', 'src', 'jobs')
+
     if server_has_active:
         ok(6, "BullMQ worker import is active in server.ts")
     elif server_has_commented and other_importers:
         error(6, f"BullMQ worker boot is commented out in server.ts — jobs enqueue via {other_importers[0]} but worker never starts, so compute jobs fail")
     elif server_has_commented:
         error(6, "BullMQ worker import is commented out in server.ts")
+    elif other_importers:
+        error(6, f"Jobs runtime is imported via {other_importers[0]} but no worker boot path was found")
+    elif not os.path.isdir(jobs_dir) and not other_importers:
+        ok(6, "No BullMQ worker/runtime present in canonical synchronous compute path")
     else:
         warn(6, "Could not determine BullMQ worker import status")
 else:

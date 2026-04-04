@@ -25,8 +25,8 @@ original Wave 1-only state:
 - Core finance screens are already rewired to `web/lib/api-client.ts`
 - `risk` and `simulations` are also rewired to canonical routes
 - Local runtime is PostgreSQL-only by default with `npm run smoke:canonical`
-- Remaining active legacy frontend boundary is primarily `dashboard/markets`
-  plus `web/lib/api.ts` / `web/lib/use-api-data.ts`
+- No active legacy frontend boundary remains on the dashboard surfaces; Wave 5
+  hardening is now focused on auth, infra/tooling, and CI gates
 
 ## Wave Status
 
@@ -36,7 +36,7 @@ original Wave 1-only state:
 | 2. First Slice | **DONE** | Low | Golden fixture passes, P&L page shows live data | 48/48 golden tests pass, P&L wired to live API |
 | 3. Compute | **DONE** | Low | Full 18-step DAG runs, both fixtures pass, balance sheet identity holds | 114/114 tests pass, all 14 nodes validated, DAG acceptance met |
 | 4. Rewire | **DONE** | Low | All pages live, no static fallback, no string IDs | All API routes live (9 routers), all dashboard pages wired to canonical API, legacy files deleted |
-| 5. Harden | **PARTIAL** | Low | Full CI green, compliance blocking, `docker-compose up` runs full stack | Canonical smoke exists, but auth/logging/blocking compliance are not done |
+| 5. Harden | **PARTIAL** | Low | Full CI green, compliance blocking, `docker-compose up` runs full stack | Auth/tenant middleware, structured logging, contract tests, and blocking compliance are live; remaining gaps are full-stack docker-compose, migration tooling, and Playwright E2E |
 
 ## Verification Strategy
 
@@ -119,15 +119,15 @@ original Wave 1-only state:
 
 | Target | Status | Generated From |
 |---|---|---|
-| `api/src/middleware/auth.ts` | **NOT_STARTED** | JWT |
-| `api/src/middleware/tenant.ts` | **NOT_STARTED** | JWT claims |
-| Structured logging (pino) | **IN_PROGRESS** | Replace console.* — 6 compute nodes migrated (planning-spine, scope-bundle, decisions, assumption-packs, confidence, balance-sheet). api/src/lib/logger.ts created. Remaining: orchestrator, server.ts, ~30 more |
+| `api/src/middleware/auth.ts` | **DONE** | JWT bearer claims + local dev token |
+| `api/src/middleware/tenant.ts` | **DONE** | JWT claims + company/tenant ownership enforcement |
+| Structured logging (pino) | **DONE** | `console.*` removed from production API runtime / compute code |
 | Canonical smoke script + CI job | **DONE** | execution baseline |
 | Complete docker-compose | **PARTIAL** | Postgres only; full stack services not added |
 | `db/migrations/` tooling | **NOT_STARTED** | node-pg-migrate |
-| `tests/api/contracts.test.ts` | **NOT_STARTED** | `api_contracts.json` |
+| `tests/api/contracts.test.ts` | **DONE** | app boot + auth/envelope smoke against canonical routes |
 | `tests/e2e/dashboard.test.ts` | **NOT_STARTED** | Playwright |
-| Flip compliance to blocking CI | **NOT_STARTED** | Remove continue-on-error |
+| Flip compliance to blocking CI | **DONE** | spec compliance now fails CI on error/warn regressions |
 
 ## DDL Alignment Fix Log (Wave 3)
 
@@ -162,22 +162,16 @@ All Wave 4 blocking legacy files have been resolved:
 - ~~`web/lib/use-api-data.ts`~~ deleted (no consumers)
 - ~~preview-only assumptions workspace~~ now reads/writes via canonical assumptions API
 
-Remaining stub data files in `web/lib/data/` are still used by non-financial dashboard pages
-(e.g., `kpis.ts`, `scenarios.ts`); these will be addressed in Wave 5.
+Wave 5 also removed the remaining stub data files under `web/lib/data/`, so the
+dashboard surfaces no longer depend on static `.ts` data shims.
 
 ## Compliance Snapshot
 
-Last verified after Wave 4 completion:
+Last verified after Wave 5 hardening extension:
 
 - `python3 scripts/spec-compliance.py`
 - Result: **COMPLIANT**
-- Summary: 6 pass, 8 warnings, 0 failures
-
-Warnings still include:
-
-- temporary stub files in `web/lib/data/`
-- `console.*` usage in production runtime / compute code
-- outdated BullMQ-specific compliance heuristic
+- Summary: 9 pass, 0 warnings, 0 failures
 
 ## Session Log
 
@@ -200,3 +194,5 @@ Warnings still include:
 | 14 | 2026-04-04 | Wave 5 hardening follow-up | Switched the golden compute integration suite from duplicated in-test arithmetic to the real orchestrator with a mocked DB harness, hardened `assertClose` with explicit finiteness checks, exported canonical confidence constants for drift-proof tests, and tightened decision overlap warnings so unresolved period IDs no longer create false positives. Also normalized markdownlint spacing in this tracker. | compliant, 0 failures |
 | 15 | 2026-04-04 | Wave 5 hardening follow-up | Scoped assumption-pack resolution to the active assumption set, fixed confidence rollups to use critical-only minimums, shared DQI scoring/upsert logic between pipeline and confidence routes, aligned decision rationale/dependency SQL with live tables, batched governance workflow-step loading and wrapped workflow/publication mutations in transactions with row-count checks, hardened scope dimension SQL, preserved assumption unit/period metadata in the dashboard save payload, kept markets freshness live on empty contexts, added real date-based market schedule parsing, and added migration `003` for `decision_rationales(decision_id)` upserts. Also moved shared route UUID validation to `z.string().uuid()` and added shared SpecOS-style error payload helpers. Verified with `npm test -- --runInBand`, `npm run build` in `api/`, `npm run build` in `web/`, and `python3 scripts/spec-compliance.py`. | compliant, 0 failures |
 | 16 | 2026-04-04 | Wave 5 hardening follow-up | Canonicalized the compute-layer assumption-pack and decision resolution queries to the SpecOS field names (`assumption_set_id`, `assumption_family`, `decision_family`, `decision_status`, `effective_from_period_id`) and added migration `004` to backfill those canonical columns on the compatibility tables used in local DBs. Also finished shared UUID validation reuse in `context.ts`, `assumptions.ts`, and `compute.ts`, then updated the integration harness to match the canonical SQL text. Re-verified with `npm test -- --runInBand`; the prior `api/` and `web/` builds plus `python3 scripts/spec-compliance.py` remain green on this patchset. | compliant, 0 failures |
+| 17 | 2026-04-04 | Wave 5 hardening follow-up | Added JWT auth and tenant ownership middleware, exported `createApp()` for server bootstrapping and contract tests, switched local/web smoke flows to bearer-token auth, deleted the remaining `web/lib/data/` stub files, rewired the dashboard home shell to live canonical APIs, completed the remaining `console.*` -> Pino migration across production API code, added `tests/api/contracts.test.ts`, mapped Jest `uuid` for app-boot tests, and made spec compliance blocking in CI. Re-verified with `npm run build` in `api/`, `npm run build` in `web/`, `npm test -- --runInBand`, `git diff --check`, and `python3 scripts/spec-compliance.py`. | compliant, 0 failures |
+| 18 | 2026-04-04 | Wave 5 hardening CI follow-up | Fixed fresh-runner CI breakages by installing `api/` dependencies in the root Jest workflow and by normalizing the seeded company/calendar/scenario IDs in `db/02-seed.sql` to valid RFC UUIDs so strict Zod UUID validation and canonical smoke requests succeed on a fresh database. Re-verified with `npm test -- --runInBand`, `python3 scripts/spec-compliance.py`, and a seed scan confirming the old invalid IDs are gone. | compliant, 0 failures |

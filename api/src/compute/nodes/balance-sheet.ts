@@ -39,6 +39,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeBalanceSheet(
   ctx: ComputeContext,
@@ -95,9 +96,9 @@ export async function executeBalanceSheet(
 
     // Validate: PPE should not go negative (over-depreciation)
     if (ppe_net < 0) {
-      console.warn(
-        `[balance-sheet] Period ${period.label}: Negative PPE (${ppe_net.toFixed(2)}) — ` +
-        `over-depreciation detected`
+      logger.warn(
+        { periodLabel: period.label, ppeNet: ppe_net },
+        'Balance sheet detected negative PPE from over-depreciation',
       );
     }
 
@@ -107,9 +108,9 @@ export async function executeBalanceSheet(
 
     // Validate: debt should not go negative
     if (debt_outstanding < 0) {
-      console.warn(
-        `[balance-sheet] Period ${period.label}: Negative debt outstanding (${debt_outstanding.toFixed(2)}) — ` +
-        `repayments exceed balance`
+      logger.warn(
+        { periodLabel: period.label, debtOutstanding: debt_outstanding },
+        'Balance sheet detected negative debt outstanding',
       );
     }
 
@@ -129,11 +130,15 @@ export async function executeBalanceSheet(
     // total_assets MUST equal total_liabilities + shareholder_equity
     const imbalance = Math.abs(total_assets - total_liabilities - shareholder_equity);
     if (imbalance > 0.01) {
-      console.warn(
-        `[balance-sheet] Period ${period.label}: BALANCE SHEET DOES NOT BALANCE! ` +
-        `Imbalance: ${imbalance.toFixed(4)} ` +
-        `(assets=${total_assets.toFixed(2)}, liabilities=${total_liabilities.toFixed(2)}, ` +
-        `equity=${shareholder_equity.toFixed(2)})`
+      logger.warn(
+        {
+          periodLabel: period.label,
+          imbalance,
+          totalAssets: total_assets,
+          totalLiabilities: total_liabilities,
+          shareholderEquity: shareholder_equity,
+        },
+        'Balance sheet identity check failed',
       );
     }
 
@@ -181,13 +186,22 @@ export async function executeBalanceSheet(
       );
     }
 
-    console.log(
-      `[balance-sheet] Period ${period.label}: ` +
-      `assets=${total_assets.toFixed(2)} (cash=${closing_cash.toFixed(2)}, ppe=${ppe_net.toFixed(2)}, ` +
-      `ar=${receivables.toFixed(2)}, inv=${inventory.toFixed(2)}), ` +
-      `liabilities=${total_liabilities.toFixed(2)} (debt=${debt_outstanding.toFixed(2)}, ap=${payables.toFixed(2)}), ` +
-      `equity=${shareholder_equity.toFixed(2)}, ` +
-      `balanced=${imbalance <= 0.01 ? 'YES' : 'NO (' + imbalance.toFixed(4) + ')'}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        totalAssets: total_assets,
+        closingCash: closing_cash,
+        ppeNet: ppe_net,
+        receivables,
+        inventory,
+        totalLiabilities: total_liabilities,
+        debtOutstanding: debt_outstanding,
+        payables,
+        shareholderEquity: shareholder_equity,
+        isBalanced: imbalance <= 0.01,
+        imbalance,
+      },
+      'Balance sheet computed for period',
     );
   }
 }

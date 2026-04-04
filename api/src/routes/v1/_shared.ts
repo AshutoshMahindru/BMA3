@@ -9,6 +9,30 @@ export function traceId(req: Request): string {
   return (req.headers['x-trace-id'] as string) || 'no-trace-id';
 }
 
+export function requestTenantId(req: Request): string | null {
+  return req.tenantId
+    || req.claims?.tenant_id
+    || req.user?.tenant_id
+    || req.user?.tenantId
+    || null;
+}
+
+export function requireTenantId(req: Request): string {
+  const tenantId = requestTenantId(req);
+  if (!tenantId) {
+    throw new Error('Missing tenant context on authenticated request');
+  }
+  return tenantId;
+}
+
+export function requestCompanyId(req: Request, fallbackCompanyId?: string): string | undefined {
+  return req.companyId
+    || req.claims?.company_id
+    || req.user?.company_id
+    || req.user?.companyId
+    || fallbackCompanyId;
+}
+
 export function meta(extra?: Record<string, unknown>) {
   return {
     freshness: { source: 'database', timestamp: new Date().toISOString() },

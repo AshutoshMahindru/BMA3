@@ -33,6 +33,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 export async function executeRevenueStack(
   ctx: ComputeContext,
@@ -73,9 +74,9 @@ export async function executeRevenueStack(
 
     // Validate: missing AOV with orders > 0
     if (realized_orders > 0 && average_order_value === 0) {
-      console.warn(
-        `[revenue-stack] Period ${period.label}: Missing average_order_value ` +
-        `for grain with realized_orders=${realized_orders}`
+      logger.warn(
+        { periodLabel: period.label, realizedOrders: realized_orders },
+        'Revenue stack found missing average order value',
       );
     }
 
@@ -102,19 +103,25 @@ export async function executeRevenueStack(
 
     // ── Step 7: Validate ──────────────────────────────────────────────────
     if (net_revenue < 0) {
-      console.warn(
-        `[revenue-stack] Period ${period.label}: Net revenue is negative (${net_revenue.toFixed(2)}) ` +
-        `— indicates excessive deductions. Discount(${discount_rate}) + Refund(${refund_rate}) ` +
-        `+ Channel(${channel_fee_rate}) = ${(discount_rate + refund_rate + channel_fee_rate).toFixed(4)}`
+      logger.warn(
+        {
+          periodLabel: period.label,
+          netRevenue: net_revenue,
+          discountRate: discount_rate,
+          refundRate: refund_rate,
+          channelFeeRate: channel_fee_rate,
+          totalDeductionRate: discount_rate + refund_rate + channel_fee_rate,
+        },
+        'Revenue stack produced negative net revenue',
       );
     }
 
     // Validate sum of rates
     const totalDeductionRate = discount_rate + refund_rate + channel_fee_rate;
     if (totalDeductionRate > 1.0) {
-      console.warn(
-        `[revenue-stack] Period ${period.label}: Total deduction rates (${totalDeductionRate.toFixed(4)}) ` +
-        `exceed 100% — would produce negative revenue`
+      logger.warn(
+        { periodLabel: period.label, totalDeductionRate },
+        'Revenue stack found deduction rates above 100%',
       );
     }
 
@@ -157,11 +164,16 @@ export async function executeRevenueStack(
       );
     }
 
-    console.log(
-      `[revenue-stack] Period ${period.label}: ` +
-      `gross_sales=${gross_sales.toFixed(2)}, discounts=${discounts.toFixed(2)}, ` +
-      `refunds=${refunds_adjustments.toFixed(2)}, channel_fees=${channel_fees.toFixed(2)}, ` +
-      `net_revenue=${net_revenue.toFixed(2)}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        grossSales: gross_sales,
+        discounts,
+        refundsAdjustments: refunds_adjustments,
+        channelFees: channel_fees,
+        netRevenue: net_revenue,
+      },
+      'Revenue stack computed for period',
     );
   }
 }

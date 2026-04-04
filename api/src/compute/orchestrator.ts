@@ -14,6 +14,7 @@
 
 import { db } from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../lib/logger';
 
 // ── Node imports ──────────────────────────────────────────────────────────────
 import { executePlanningSpine } from './nodes/planning-spine';
@@ -242,7 +243,10 @@ async function executeCrossValidateStub(_ctx: ComputeContext, state: PipelineSta
       (fin.net_change_in_cash ?? 0);
 
     if (Math.abs(cf_check) > 0.01) {
-      console.warn(`[cross-validate] Period ${pid}: Cash flow components do not reconcile. Diff: ${cf_check.toFixed(2)}`);
+      logger.warn(
+        { periodId: pid, cashflowDifference: Number(cf_check.toFixed(2)) },
+        'Cross-validation found cash flow reconciliation mismatch',
+      );
     }
 
     // Validate: total_assets = total_liabilities + shareholder_equity
@@ -252,7 +256,10 @@ async function executeCrossValidateStub(_ctx: ComputeContext, state: PipelineSta
       (fin.shareholder_equity ?? 0);
 
     if (Math.abs(bs_check) > 0.01) {
-      console.warn(`[cross-validate] Period ${pid}: Balance sheet imbalance. Diff: ${bs_check.toFixed(2)}`);
+      logger.warn(
+        { periodId: pid, balanceSheetDifference: Number(bs_check.toFixed(2)) },
+        'Cross-validation found balance sheet imbalance',
+      );
     }
   }
 }

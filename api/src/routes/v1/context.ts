@@ -2,11 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
-import { idSchema, uuidSchema } from './_shared';
+import { idSchema, requireTenantId } from './_shared';
 
 const router = Router();
-
-const DEFAULT_TENANT_ID = '10000000-0000-4000-8000-000000000001';
 
 const CompanyCreateBody = z.object({
   name: z.string().min(1),
@@ -60,11 +58,6 @@ const FreezePublishBody = z.object({
 
 function traceId(req: Request): string {
   return (req.headers['x-trace-id'] as string) || 'no-trace-id';
-}
-
-function tenantId(req: Request): string {
-  const value = req.headers['x-tenant-id'] as string | undefined;
-  return value && uuidSchema.safeParse(value).success ? value : DEFAULT_TENANT_ID;
 }
 
 function meta(extra?: Record<string, unknown>) {
@@ -216,7 +209,7 @@ router.post('/companies', validate(CompanyCreateBody), async (req: Request, res:
       `INSERT INTO companies (tenant_id, name, base_currency, fiscal_year_start_month, country_code, metadata)
        VALUES ($1, $2, $3, $4, 'US', $5::jsonb)
        RETURNING id, name, base_currency, fiscal_year_start_month, metadata, created_at, updated_at`,
-      [tenantId(req), name, baseCurrency, fiscalYearStart || 1, JSON.stringify({ industry })],
+      [requireTenantId(req), name, baseCurrency, fiscalYearStart || 1, JSON.stringify({ industry })],
     );
 
     res.status(201).json({ data: companySummary(rows[0]), meta: meta() });
@@ -360,7 +353,7 @@ router.post('/companies/:companyId/calendars', validate(CalendarCreateBody), asy
       `INSERT INTO planning_calendars (tenant_id, company_id, name, start_date, end_date, metadata)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb)
        RETURNING id, name, created_at`,
-      [tenantId(req), companyId, name, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10), JSON.stringify({ periodGranularity, horizonYears: years })],
+      [requireTenantId(req), companyId, name, start.toISOString().slice(0, 10), end.toISOString().slice(0, 10), JSON.stringify({ periodGranularity, horizonYears: years })],
     );
 
     let sequence = 1;
@@ -381,7 +374,7 @@ router.post('/companies/:companyId/calendars', validate(CalendarCreateBody), asy
            (tenant_id, calendar_id, name, start_date, end_date, period_type, sequence_order)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
-          tenantId(req),
+          requireTenantId(req),
           calendar.rows[0].id,
           periodLabelFor(cursor, periodGranularity, sequence - 1),
           cursor.toISOString().slice(0, 10),

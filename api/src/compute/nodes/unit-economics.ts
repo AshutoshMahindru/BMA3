@@ -38,6 +38,7 @@
 
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../../lib/logger';
 import { ComputeContext, PipelineState } from '../orchestrator';
 
 // ── IRR via Bisection ────────────────────────────────────────────────────────
@@ -253,11 +254,16 @@ export async function executeUnitEconomics(
       await upsertKPI(ctx, pid, metric_name, value);
     }
 
-    console.log(
-      `[unit-economics] Period ${period.label}: ` +
-      `rev/order=${net_revenue_per_order.toFixed(2)}, cogs/order=${cogs_per_order.toFixed(2)}, ` +
-      `cm1/order=${cm1_per_order.toFixed(2)}, ebitda/order=${ebitda_per_order.toFixed(2)}, ` +
-      `BE orders/day=${isFinite(breakeven_orders_per_day) ? breakeven_orders_per_day.toFixed(1) : 'N/A'}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        netRevenuePerOrder: net_revenue_per_order,
+        cogsPerOrder: cogs_per_order,
+        cm1PerOrder: cm1_per_order,
+        ebitdaPerOrder: ebitda_per_order,
+        breakevenOrdersPerDay: isFinite(breakeven_orders_per_day) ? breakeven_orders_per_day : null,
+      },
+      'Unit economics computed for period',
     );
   }
 
@@ -343,12 +349,14 @@ export async function executeUnitEconomics(
     await upsertKPI(ctx, scenarioPeriodId, `scenario_${metric_name}`, value);
   }
 
-  console.log(
-    `[unit-economics] Scenario KPIs: ` +
-    `IRR=${irr !== null ? (irr * 100).toFixed(2) + '%' : 'N/A'}, ` +
-    `NPV=${npv.toFixed(0)}, ` +
-    `Payback=${paybackPeriod ?? 'N/A'} months, ` +
-    `Breakeven month=${breakevenMonth ?? 'N/A'}, ` +
-    `ROIC=${(scenarioRoic * 100).toFixed(1)}%`
+  logger.info(
+    {
+      irr,
+      npv,
+      paybackPeriodMonths: paybackPeriod,
+      breakevenMonth,
+      scenarioRoic,
+    },
+    'Unit economics scenario KPIs computed',
   );
 }

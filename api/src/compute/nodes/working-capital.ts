@@ -38,6 +38,7 @@
 import { db } from '../../db';
 import { v4 as uuidv4 } from 'uuid';
 import { ComputeContext, PipelineState } from '../orchestrator';
+import { logger } from '../../lib/logger';
 
 /** Standard days-in-month for working capital timing calculations */
 const DAYS_IN_MONTH = 30;
@@ -84,14 +85,15 @@ export async function executeWorkingCapital(
 
     // ── Validate timing assumptions ────────────────────────────────────────
     if (receivables_days > DAYS_IN_MONTH) {
-      console.warn(
-        `[working-capital] Period ${period.label}: receivables_days (${receivables_days}) ` +
-        `exceeds period length (${DAYS_IN_MONTH}) — may be invalid`
+      logger.warn(
+        { periodLabel: period.label, receivablesDays: receivables_days, daysInPeriod: DAYS_IN_MONTH },
+        'Working capital found receivables days above period length',
       );
     }
     if (payables_days < 0 || inventory_days < 0) {
-      console.warn(
-        `[working-capital] Period ${period.label}: Negative payables_days or inventory_days`
+      logger.warn(
+        { periodLabel: period.label, payablesDays: payables_days, inventoryDays: inventory_days },
+        'Working capital found negative timing assumption',
       );
     }
 
@@ -120,9 +122,9 @@ export async function executeWorkingCapital(
     // ── Validate ───────────────────────────────────────────────────────────
     // Working capital swing exceeds revenue (likely data error)
     if (net_revenue > 0 && Math.abs(working_capital_movement) > net_revenue) {
-      console.warn(
-        `[working-capital] Period ${period.label}: WC movement (${working_capital_movement.toFixed(2)}) ` +
-        `exceeds net_revenue (${net_revenue.toFixed(2)}) — possible data error`
+      logger.warn(
+        { periodLabel: period.label, workingCapitalMovement: working_capital_movement, netRevenue: net_revenue },
+        'Working capital movement exceeded net revenue',
       );
     }
 
@@ -160,10 +162,15 @@ export async function executeWorkingCapital(
       ]
     );
 
-    console.log(
-      `[working-capital] Period ${period.label}: ` +
-      `receivables=${receivables.toFixed(2)}, payables=${payables.toFixed(2)}, ` +
-      `inventory=${inventory.toFixed(2)}, wc_movement=${working_capital_movement.toFixed(2)}`
+    logger.info(
+      {
+        periodLabel: period.label,
+        receivables,
+        payables,
+        inventory,
+        workingCapitalMovement: working_capital_movement,
+      },
+      'Working capital computed for period',
     );
   }
 }

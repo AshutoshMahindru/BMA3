@@ -65,11 +65,11 @@ import type {
 // Preserves existing pattern from web/lib/api.ts:
 //   - Never throws; always returns { data, meta, error }
 //   - Timeout via AbortController
-//   - x-tenant-id header injected on every request
+//   - local/dev bearer token injected on every request
 // ─────────────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-const TENANT_ID = '10000000-0000-4000-8000-000000000001';
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || 'dev-local-token';
 const TIMEOUT_MS = 8000;
 
 async function request<T>(
@@ -107,7 +107,7 @@ async function request<T>(
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        'x-tenant-id': TENANT_ID,
+        'Authorization': `Bearer ${API_TOKEN}`,
       },
       body: resolvedBody !== undefined ? JSON.stringify(resolvedBody) : undefined,
     });
