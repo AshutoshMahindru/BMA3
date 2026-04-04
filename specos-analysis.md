@@ -99,7 +99,7 @@ The real orchestrator runs in the integration suite, and the live async queue pa
 ## Database — Fully Covered
 
 - All **50 entities** from `canonical_schema.json` present in DDL.
-- 5 migrations landed: `001` schema reconciliation → `002` unique constraints → `003` decision rationale upserts → `004` canonical-alias backfill → `005` canonical assumption-pack/bootstrap seed.
+- 6 migrations landed: `001` schema reconciliation → `002` unique constraints → `003` decision rationale upserts → `004` canonical-alias backfill → `005` canonical assumption-pack/bootstrap seed → `006` seeded opening-balance reconciliation.
 
 ---
 
@@ -119,8 +119,3 @@ No remaining prioritized SpecOS parity gaps are currently tracked. The last
 runtime cleanup item was the seeded base-scenario reconciliation issue, which is
 now handled by migration
 [`006-reconcile-seeded-opening-balances.sql`](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/db/migrations/006-reconcile-seeded-opening-balances.sql).
-
-One non-blocking maintenance follow-up remains outside the prioritized parity
-list: [`api/scripts/smoke-canonical-runtime.ts`](/Users/ashutoshmahindru/.codex/worktrees/d206/BME/api/scripts/smoke-canonical-runtime.ts)
-still assumes `/compute/runs` completes synchronously and should be updated to
-poll queued runs on the async compose runtime.
