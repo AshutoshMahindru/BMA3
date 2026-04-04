@@ -16,7 +16,7 @@ import DataFreshness from '@/components/data-freshness';
 
 export default function MarketRolloutPlanner() {
   const ctx = usePlanningContext();
-  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+  const scenarioId = ctx.scenarioId || '';
 
   const { data: rolloutData, source, lastFetched } = useApiData<RolloutPlanData>(
     () => fetchRolloutPlans(scenarioId),
@@ -37,7 +37,7 @@ export default function MarketRolloutPlanner() {
             Market Rollout Planner
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — Kitchen Expansion Pipeline & Timeline
+            {ctx.companyName} — Kitchen Expansion Pipeline & Timeline
             <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>

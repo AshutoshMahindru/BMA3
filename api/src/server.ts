@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
+// ── Legacy Phase 1–4 routes (kept for backward compat; will be removed in Wave 4) ──
 import companiesRouter from './routes/v1/companies';
 import planningCalendarsRouter from './routes/v1/planning-calendars';
 import scenariosRouter from './routes/v1/scenarios';
@@ -21,7 +23,15 @@ import fundingParametersRouter from './routes/v1/funding-parameters';
 import rolloutPlansRouter from './routes/v1/rollout-plans';
 import riskScenariosRouter from './routes/v1/risk-scenarios';
 import simulationRunsRouter from './routes/v1/simulation-runs';
-// import './jobs'; // Boot BullMQ worker
+
+// ── BullMQ worker — must be imported before routes so the worker process starts ──
+import './jobs';
+
+// ── New SpecOS-aligned routes (Wave 3 — BMA3 modelling engine) ──
+import contextRouter from './routes/v1/context';
+import assumptionsRouter from './routes/v1/assumptions';
+import financialsRouter from './routes/v1/financials';
+import computeRouter from './routes/v1/compute';
 
 dotenv.config();
 
@@ -31,41 +41,51 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-// Phase 1 Routes
+// ════════════════════════════════════════════════════════════════════════════════
+// SpecOS-aligned routes (canonical namespace — preferred)
+// ════════════════════════════════════════════════════════════════════════════════
+app.use('/api/v1/context', contextRouter);
+app.use('/api/v1/assumptions', assumptionsRouter);
+app.use('/api/v1/financials', financialsRouter);
+app.use('/api/v1/compute', computeRouter);
+
+// ════════════════════════════════════════════════════════════════════════════════
+// Legacy Phase 1 routes (will be removed in Wave 4)
+// ════════════════════════════════════════════════════════════════════════════════
 app.use('/api/v1/companies', companiesRouter);
 app.use('/api/v1/planning-calendars', planningCalendarsRouter);
 app.use('/api/v1/scenarios', scenariosRouter);
 
-// Phase 2 Routes (Sprint 2.1 & 2.2)
+// Legacy Phase 2 routes (Sprint 2.1 & 2.2)
 app.use('/api/v1/demand-drivers', demandDriversRouter);
 app.use('/api/v1/price-plans', pricePlansRouter);
 app.use('/api/v1/mix-plans', mixPlansRouter);
 app.use('/api/v1/unit-cost-profiles', unitCostProfilesRouter);
 app.use('/api/v1/labor-models', laborModelsRouter);
 
-// Phase 2 Routes (Sprint 2.3 & 2.4)
+// Legacy Phase 2 routes (Sprint 2.3 & 2.4)
 app.use('/api/v1/opex-plans', opexPlansRouter);
 app.use('/api/v1/marketing-plans', marketingPlansRouter);
 app.use('/api/v1/capex-plans', capexPlansRouter);
 app.use('/api/v1/working-capital-policies', workingCapitalPoliciesRouter);
 
-// Phase 2 Routes (Sprint 2.5 & 2.6)
+// Legacy Phase 2 routes (Sprint 2.5 & 2.6)
 app.use('/api/v1/financial-projections', financialProjectionsRouter);
 app.use('/api/v1/unit-economics', unitEconomicsRouter);
 app.use('/api/v1/kpi-projections', kpiProjectionsRouter);
 
-// Phase 3 Routes (Sprint 3.2)
+// Legacy Phase 3 routes (Sprint 3.2)
 app.use('/api/v1/driver-explainability', driverExplainabilityRouter);
 app.use('/api/v1/funding-parameters', fundingParametersRouter);
 app.use('/api/v1/rollout-plans', rolloutPlansRouter);
 
-// Phase 4 Routes (Sprint 4.1-4.4)
+// Legacy Phase 4 routes (Sprint 4.1-4.4)
 app.use('/api/v1/risk-scenarios', riskScenariosRouter);
 app.use('/api/v1/simulation-runs', simulationRunsRouter);
 
 // Health check
 app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'OK', message: 'FPE API is running' });
+  res.json({ status: 'OK', message: 'BMA3 API is running' });
 });
 
 // Standard Error Envelope response
@@ -81,5 +101,5 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 app.listen(PORT, () => {
-  console.log(`FPE API Server running on port ${PORT}`);
+  console.log(`BMA3 API Server running on port ${PORT}`);
 });

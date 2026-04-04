@@ -1,0 +1,1065 @@
+[
+  {
+    "id": "api_compute_001",
+    "method": "POST",
+    "path": "/api/v1/compute/validations",
+    "stage": "compute",
+    "description": "Run validation on the current planning package",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "validationId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "issueCounts": {
+                  "type": "object",
+                  "properties": {
+                    "blocking": {
+                      "type": "integer"
+                    },
+                    "warning": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VERSION_NOT_FOUND",
+          "status": 404,
+          "description": "Version not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_002",
+    "method": "GET",
+    "path": "/api/v1/compute/validations/:validationId",
+    "stage": "compute",
+    "description": "Retrieve validation job details",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "validationId",
+          "type": "uuid",
+          "description": "Validation ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "validationId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "issueCounts": {
+                  "type": "object"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                },
+                "completedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VALIDATION_NOT_FOUND",
+          "status": 404,
+          "description": "Validation not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_003",
+    "method": "GET",
+    "path": "/api/v1/compute/validations/:validationId/issues",
+    "stage": "compute",
+    "description": "List issues found during validation",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "severity",
+          "type": "string",
+          "required": false,
+          "description": "Filter by severity (blocking|warning)"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "validationId",
+          "type": "uuid",
+          "description": "Validation ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "severity": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "surface": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "entityRefs": {
+                    "type": "array"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VALIDATION_NOT_FOUND",
+          "status": 404,
+          "description": "Validation not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_004",
+    "method": "POST",
+    "path": "/api/v1/compute/runs",
+    "stage": "compute",
+    "description": "Start a new compute run for the planning package",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "triggerType": {
+            "type": "string",
+            "description": "manual|auto|recompute"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "COMPUTE_VALIDATION_FAILED",
+          "status": 409,
+          "description": "Compute validation failed with blocking issues"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_005",
+    "method": "GET",
+    "path": "/api/v1/compute/runs",
+    "stage": "compute",
+    "description": "List compute runs for a scenario/version",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company ID"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": true,
+          "description": "Scenario ID"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version ID"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "Filter by status"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "computeRunId": {
+                    "type": "uuid"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "triggerType": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  },
+                  "completedAt": {
+                    "type": "datetime"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_006",
+    "method": "GET",
+    "path": "/api/v1/compute/runs/:runId",
+    "stage": "compute",
+    "description": "Retrieve a single compute run by ID",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "runId",
+          "type": "uuid",
+          "description": "Compute run ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "triggerType": {
+                  "type": "string"
+                },
+                "stepsTotal": {
+                  "type": "integer"
+                },
+                "stepsCompleted": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                },
+                "completedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPUTE_RUN_NOT_FOUND",
+          "status": 404,
+          "description": "Compute Run not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_007",
+    "method": "POST",
+    "path": "/api/v1/compute/runs/:runId/cancel",
+    "stage": "compute",
+    "description": "Cancel a running or queued compute run",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Cancellation reason"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "runId",
+          "type": "uuid",
+          "description": "Compute run ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "cancelledAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPUTE_RUN_NOT_FOUND",
+          "status": 404,
+          "description": "Compute Run not found"
+        },
+        {
+          "code": "COMPUTE_RUN_NOT_CANCELLABLE",
+          "status": 409,
+          "description": "Run is already completed or failed"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_008",
+    "method": "GET",
+    "path": "/api/v1/compute/runs/:runId/steps",
+    "stage": "compute",
+    "description": "List individual steps within a compute run",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": [
+        {
+          "name": "runId",
+          "type": "uuid",
+          "description": "Compute run ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "stepId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": "datetime"
+                  },
+                  "completedAt": {
+                    "type": "datetime"
+                  },
+                  "durationMs": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPUTE_RUN_NOT_FOUND",
+          "status": 404,
+          "description": "Compute Run not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_009",
+    "method": "GET",
+    "path": "/api/v1/compute/runs/:runId/results",
+    "stage": "compute",
+    "description": "Retrieve computed output summary for a run",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "runId",
+          "type": "uuid",
+          "description": "Compute run ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "outputSummary": {
+                  "type": "object"
+                },
+                "warnings": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "COMPUTE_RUN_NOT_FOUND",
+          "status": 404,
+          "description": "Compute Run not found"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_010",
+    "method": "GET",
+    "path": "/api/v1/compute/dependencies",
+    "stage": "compute",
+    "description": "Show dependency graph for the compute pipeline",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "nodes": {
+                  "type": "array"
+                },
+                "edges": {
+                  "type": "array"
+                },
+                "criticalPath": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 60
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_compute_011",
+    "method": "GET",
+    "path": "/api/v1/compute/freshness",
+    "stage": "compute",
+    "description": "Check freshness status of computed outputs",
+    "gs_source": "API_SPEC.md \u00a75.5 Compute APIs",
+    "requirement_families": [
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string",
+                  "enum": [
+                    "fresh",
+                    "stale",
+                    "running",
+                    "failed"
+                  ]
+                },
+                "lastRunId": {
+                  "type": "uuid"
+                },
+                "lastRunAt": {
+                  "type": "datetime"
+                },
+                "staleSurfaces": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  }
+]

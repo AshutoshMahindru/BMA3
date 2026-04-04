@@ -36,7 +36,7 @@ export default function SimulationLab() {
   const [costShock, setCostShock] = useState(10);
   const [iterations, setIterations] = useState(1000);
 
-  const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+  const scenarioId = ctx.scenarioId || '';
 
   const { data: results, source, lastFetched, refetch } = useApiData<SimulationSummary[]>(
     () => runId ? fetchSimulationResults(runId) : Promise.resolve({ data: FALLBACK_SUMMARIES, error: null }),
@@ -110,7 +110,7 @@ export default function SimulationLab() {
               Simulation Lab & Monte Carlo Workbench
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-              Probabilistic Modeling — {ctx.scenarioLabel}
+              Probabilistic Modeling — {ctx.scenarioName}
               <DataFreshness source={source} lastFetched={lastFetched} />
             </p>
           </div>

@@ -40,7 +40,7 @@ export default function CashflowConsole() {
             Cash Flow Projection Console
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — {ctx.scenarioLabel} — {ctx.timePeriodLabel}
+            {ctx.companyName} — {ctx.scenarioName} — {ctx.timePeriodLabel}
             <DataFreshness source={source} lastFetched={lastFetched} />
           </p>
         </div>

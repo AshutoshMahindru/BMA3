@@ -53,7 +53,7 @@ export default function HomePage() {
       {/* Page Header */}
       <div className="px-6 pt-6 pb-4">
         <h1 className="text-xl font-bold text-gray-900 tracking-tight">Global Planning Overview</h1>
-        <p className="text-sm text-gray-500 mt-1">Consolidated view across {ctx.scopeLabel} — {ctx.timePeriodLabel} — {ctx.scenarioLabel}</p>
+        <p className="text-sm text-gray-500 mt-1">Consolidated view across {ctx.companyName} — {ctx.periodLabel} — {ctx.scenarioName}</p>
       </div>
 
       <div className="px-6 pb-8 space-y-6">

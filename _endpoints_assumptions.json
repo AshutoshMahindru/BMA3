@@ -1,0 +1,1954 @@
+[
+  {
+    "id": "api_assumptions_001",
+    "method": "GET",
+    "path": "/api/v1/assumptions/sets",
+    "stage": "assumptions",
+    "description": "List assumption sets for the planning context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "assumptionSetId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_002",
+    "method": "POST",
+    "path": "/api/v1/assumptions/sets",
+    "stage": "assumptions",
+    "description": "Create a new assumption set",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "name"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "name": {
+            "type": "string",
+            "description": "Set name"
+          },
+          "baseSetId": {
+            "type": "uuid",
+            "description": "Base set for inheritance"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "assumptionSetId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_003",
+    "method": "GET",
+    "path": "/api/v1/assumptions/sets/:assumptionSetId",
+    "stage": "assumptions",
+    "description": "Retrieve a single assumption set",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "assumptionSetId",
+          "type": "uuid",
+          "description": "Assumption set ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "assumptionSetId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "fieldCount": {
+                  "type": "integer"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                },
+                "updatedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "ASSUMPTION_SET_NOT_FOUND",
+          "status": 404,
+          "description": "Assumption Set not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_004",
+    "method": "PATCH",
+    "path": "/api/v1/assumptions/sets/:assumptionSetId",
+    "stage": "assumptions",
+    "description": "Update assumption set metadata",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Updated name"
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated status"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Audit reason"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "assumptionSetId",
+          "type": "uuid",
+          "description": "Assumption set ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "assumptionSetId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "ASSUMPTION_SET_NOT_FOUND",
+          "status": 404,
+          "description": "Assumption Set not found"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_005",
+    "method": "GET",
+    "path": "/api/v1/assumptions/packs",
+    "stage": "assumptions",
+    "description": "List available assumption packs",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "packId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "fieldCount": {
+                    "type": "integer"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_006",
+    "method": "POST",
+    "path": "/api/v1/assumptions/packs",
+    "stage": "assumptions",
+    "description": "Create a reusable assumption pack",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "name",
+          "fields"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Pack name"
+          },
+          "category": {
+            "type": "string",
+            "description": "demand|cost|funding|working_capital"
+          },
+          "fields": {
+            "type": "array",
+            "description": "Field bindings with values"
+          },
+          "description": {
+            "type": "string",
+            "description": "Pack description"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "packId": {
+                  "type": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "ASSUMPTION_PACK_INCOMPLETE",
+          "status": 400,
+          "description": "Assumption pack has missing required fields"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_007",
+    "method": "POST",
+    "path": "/api/v1/assumptions/packs/:packId/apply",
+    "stage": "assumptions",
+    "description": "Apply an assumption pack to a target set and scope",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "targetSetId"
+        ],
+        "properties": {
+          "targetSetId": {
+            "type": "uuid",
+            "description": "Target assumption set"
+          },
+          "scopeBundleId": {
+            "type": "uuid",
+            "description": "Scope to apply within"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": [
+        {
+          "name": "packId",
+          "type": "uuid",
+          "description": "Pack ID"
+        }
+      ]
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "applied": {
+                  "type": "boolean"
+                },
+                "fieldsApplied": {
+                  "type": "integer"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "ASSUMPTION_PACK_NOT_FOUND",
+          "status": 404,
+          "description": "Assumption Pack not found"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "ASSUMPTION_PACK_INCOMPLETE",
+          "status": 400,
+          "description": "Assumption pack has missing required fields"
+        },
+        {
+          "code": "SCOPE_NOT_RESOLVED",
+          "status": 400,
+          "description": "Scope bundle not resolved"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 10
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_008",
+    "method": "GET",
+    "path": "/api/v1/assumptions/demand",
+    "stage": "assumptions",
+    "description": "List demand assumptions for current context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "fieldId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "periodId": {
+                    "type": "uuid"
+                  },
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_009",
+    "method": "PUT",
+    "path": "/api/v1/assumptions/demand/bulk",
+    "stage": "assumptions",
+    "description": "Bulk update demand assumptions",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId",
+          "updates"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fieldId": {
+                  "type": "uuid"
+                },
+                "periodId": {
+                  "type": "uuid"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "updated": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "ASSUMPTION_VALIDATION_FAILED",
+          "status": 400,
+          "description": "One or more assumption values failed validation"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_010",
+    "method": "GET",
+    "path": "/api/v1/assumptions/cost",
+    "stage": "assumptions",
+    "description": "List cost assumptions for current context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "fieldId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "periodId": {
+                    "type": "uuid"
+                  },
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_011",
+    "method": "PUT",
+    "path": "/api/v1/assumptions/cost/bulk",
+    "stage": "assumptions",
+    "description": "Bulk update cost assumptions",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId",
+          "updates"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fieldId": {
+                  "type": "uuid"
+                },
+                "periodId": {
+                  "type": "uuid"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "updated": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "ASSUMPTION_VALIDATION_FAILED",
+          "status": 400,
+          "description": "One or more assumption values failed validation"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_012",
+    "method": "GET",
+    "path": "/api/v1/assumptions/funding",
+    "stage": "assumptions",
+    "description": "List funding assumptions for current context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "fieldId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "periodId": {
+                    "type": "uuid"
+                  },
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_013",
+    "method": "PUT",
+    "path": "/api/v1/assumptions/funding/bulk",
+    "stage": "assumptions",
+    "description": "Bulk update funding assumptions",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId",
+          "updates"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fieldId": {
+                  "type": "uuid"
+                },
+                "periodId": {
+                  "type": "uuid"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "updated": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "ASSUMPTION_VALIDATION_FAILED",
+          "status": 400,
+          "description": "One or more assumption values failed validation"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_014",
+    "method": "GET",
+    "path": "/api/v1/assumptions/working-capital",
+    "stage": "assumptions",
+    "description": "List working capital assumptions for current context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "fieldId": {
+                    "type": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "periodId": {
+                    "type": "uuid"
+                  },
+                  "confidence": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_015",
+    "method": "PUT",
+    "path": "/api/v1/assumptions/working-capital/bulk",
+    "stage": "assumptions",
+    "description": "Bulk update working capital assumptions",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "companyId",
+          "scenarioId",
+          "versionId",
+          "updates"
+        ],
+        "properties": {
+          "companyId": {
+            "type": "uuid",
+            "description": "Company ID"
+          },
+          "scenarioId": {
+            "type": "uuid",
+            "description": "Scenario ID"
+          },
+          "versionId": {
+            "type": "uuid",
+            "description": "Version ID"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "fieldId": {
+                  "type": "uuid"
+                },
+                "periodId": {
+                  "type": "uuid"
+                },
+                "value": {
+                  "type": "number"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "updated": {
+                  "type": "integer"
+                },
+                "skipped": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "array"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        },
+        {
+          "code": "ASSUMPTION_VALIDATION_FAILED",
+          "status": 400,
+          "description": "One or more assumption values failed validation"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_016",
+    "method": "GET",
+    "path": "/api/v1/assumptions/overrides",
+    "stage": "assumptions",
+    "description": "List assumption overrides for context",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM",
+      "R-CNF"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "description": "Page size (default 50, max 200)"
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "description": "Pagination offset"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "overrideId": {
+                    "type": "uuid"
+                  },
+                  "fieldId": {
+                    "type": "uuid"
+                  },
+                  "originalValue": {
+                    "type": "number"
+                  },
+                  "overrideValue": {
+                    "type": "number"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "actor": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "datetime"
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": true,
+      "default_limit": 50,
+      "max_limit": 200
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "API_SPEC.md"
+  },
+  {
+    "id": "api_assumptions_017",
+    "method": "POST",
+    "path": "/api/v1/assumptions/overrides",
+    "stage": "assumptions",
+    "description": "Create an assumption override with rationale",
+    "gs_source": "API_SPEC.md \u00a75.4 Assumption APIs",
+    "requirement_families": [
+      "R-ASM",
+      "R-CNF"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": {
+        "type": "object",
+        "required": [
+          "fieldId",
+          "overrideValue",
+          "reason"
+        ],
+        "properties": {
+          "fieldId": {
+            "type": "uuid",
+            "description": "Field to override"
+          },
+          "overrideValue": {
+            "type": "number",
+            "description": "New value"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Override rationale"
+          },
+          "evidenceRef": {
+            "type": "uuid",
+            "description": "Optional linked evidence"
+          }
+        }
+      },
+      "query_params": [],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 201,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "overrideId": {
+                  "type": "uuid"
+                },
+                "fieldId": {
+                  "type": "uuid"
+                },
+                "overrideValue": {
+                  "type": "number"
+                },
+                "createdAt": {
+                  "type": "datetime"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "ASSUMPTION_FIELD_NOT_FOUND",
+          "status": 404,
+          "description": "Assumption Field not found"
+        },
+        {
+          "code": "VERSION_FROZEN",
+          "status": 409,
+          "description": "Version is frozen and cannot be edited"
+        },
+        {
+          "code": "VALIDATION_ERROR",
+          "status": 400,
+          "description": "Invalid or missing required fields"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 30
+    },
+    "owner_doc": "API_SPEC.md"
+  }
+]

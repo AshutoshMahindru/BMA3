@@ -180,7 +180,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <div className="hidden xl:flex items-center gap-2">
                 <div className="flex items-center gap-1.5 bg-gray-50 rounded px-2.5 py-1 border border-gray-200">
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Scenario:</span>
-                  <span className="text-[11px] font-semibold text-gray-700">{ctx.scenarioLabel}</span>
+                  <span className="text-[11px] font-semibold text-gray-700">{ctx.scenarioName}</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-gray-50 rounded px-2.5 py-1 border border-gray-200">
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Period:</span>
@@ -188,7 +188,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="flex items-center gap-1.5 bg-gray-50 rounded px-2.5 py-1 border border-gray-200">
                   <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Scope:</span>
-                  <span className="text-[11px] font-semibold text-gray-700">{ctx.scopeLabel}</span>
+                  <span className="text-[11px] font-semibold text-gray-700">{ctx.companyName}</span>
                 </div>
               </div>
               <button className="p-2 text-gray-400 hover:text-gray-700 transition relative">
@@ -230,8 +230,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <div>
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Time Period</h4>
                 <select
-                  value={ctx.timePeriod}
-                  onChange={e => ctx.setTimePeriod(e.target.value as TimePeriod)}
+                  value={ctx.periodLabel}
+                  onChange={e => ctx.setPeriodRange(e.target.value, e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-700 rounded-md px-2.5 py-2 cursor-pointer hover:bg-white transition"
                 >
                   {timeOptions.map(o => (
@@ -245,9 +245,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Scenario</h4>
                 <div className="space-y-1.5">
                   {scenarioPills.map(s => (
-                    <button key={s.id} onClick={() => ctx.setScenario(s.id)}
+                    <button key={s.id} onClick={() => ctx.setScenarioId(s.id)}
                       className={`w-full text-left text-xs font-medium px-3 py-2 rounded-md transition ${
-                        ctx.scenario === s.id
+                        ctx.scenarioId === s.id
                           ? `${s.color} text-white shadow-sm`
                           : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200'
                       }`}
@@ -263,7 +263,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <h4 className="text-[10px] uppercase font-bold text-gray-400 mb-2 tracking-wider">Assumption Set</h4>
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200 space-y-1">
                   <p className="text-[10px] font-bold text-gray-700">AS-2025-03</p>
-                  <p className="text-[10px] text-gray-500">v4 (Draft) · {ctx.scenarioLabel}</p>
+                  <p className="text-[10px] text-gray-500">v4 (Draft) · {ctx.scenarioName}</p>
                   <p className="text-[10px] text-gray-400">Confidence: <span className="font-bold text-[#C47A1E]">76% Medium</span></p>
                   <p className="text-[10px] text-gray-400">Status: <span className="font-bold text-blue-600">Pending CFO</span></p>
                 </div>

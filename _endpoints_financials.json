@@ -1,0 +1,880 @@
+[
+  {
+    "id": "api_financials_001",
+    "method": "GET",
+    "path": "/api/v1/financials/executive-summary",
+    "stage": "financials",
+    "description": "Executive summary with headline KPIs from latest compute",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "revenue": {
+                  "type": "number"
+                },
+                "grossProfit": {
+                  "type": "number"
+                },
+                "ebitda": {
+                  "type": "number"
+                },
+                "netIncome": {
+                  "type": "number"
+                },
+                "burn": {
+                  "type": "number"
+                },
+                "runway": {
+                  "type": "number"
+                },
+                "irr": {
+                  "type": "number"
+                },
+                "periodLabel": {
+                  "type": "string"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        },
+        {
+          "code": "VERSION_NOT_FOUND",
+          "status": 404,
+          "description": "Version not found"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_002",
+    "method": "GET",
+    "path": "/api/v1/financials/pnl",
+    "stage": "financials",
+    "description": "P&L projection for the selected context",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "granularity",
+          "type": "string",
+          "required": false,
+          "description": "monthly|quarterly|annual"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "periods": {
+                  "type": "array"
+                },
+                "lineItems": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "values": {
+                        "type": "array"
+                      },
+                      "category": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_003",
+    "method": "GET",
+    "path": "/api/v1/financials/cash-flow",
+    "stage": "financials",
+    "description": "Cash flow projection for the selected context",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "granularity",
+          "type": "string",
+          "required": false,
+          "description": "monthly|quarterly|annual"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "periods": {
+                  "type": "array"
+                },
+                "lineItems": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "values": {
+                        "type": "array"
+                      },
+                      "category": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_004",
+    "method": "GET",
+    "path": "/api/v1/financials/balance-sheet",
+    "stage": "financials",
+    "description": "Balance sheet projection for the selected context",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "granularity",
+          "type": "string",
+          "required": false,
+          "description": "monthly|quarterly|annual"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "periods": {
+                  "type": "array"
+                },
+                "lineItems": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "values": {
+                        "type": "array"
+                      },
+                      "category": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_005",
+    "method": "GET",
+    "path": "/api/v1/financials/unit-economics",
+    "stage": "financials",
+    "description": "Unit economics breakdown for the selected context",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        },
+        {
+          "name": "dimension",
+          "type": "string",
+          "required": false,
+          "description": "Breakdown dimension (product|channel|geography)"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "units": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "revenue": {
+                        "type": "number"
+                      },
+                      "cogs": {
+                        "type": "number"
+                      },
+                      "contributionMargin": {
+                        "type": "number"
+                      },
+                      "ebitdaPerUnit": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_006",
+    "method": "GET",
+    "path": "/api/v1/financials/funding-summary",
+    "stage": "financials",
+    "description": "Funding summary including cash position, burn, runway, and events",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "cashPosition": {
+                  "type": "number"
+                },
+                "monthlyBurn": {
+                  "type": "number"
+                },
+                "runway": {
+                  "type": "number"
+                },
+                "fundingEvents": {
+                  "type": "array"
+                },
+                "totalRaised": {
+                  "type": "number"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  },
+  {
+    "id": "api_financials_007",
+    "method": "GET",
+    "path": "/api/v1/financials/capital-strategy",
+    "stage": "financials",
+    "description": "Capital strategy view with return metrics and allocation",
+    "gs_source": "API_SPEC.md \u00a75.6 Financial APIs",
+    "requirement_families": [
+      "R-FIN",
+      "R-CMP"
+    ],
+    "authentication": "required",
+    "request_schema": {
+      "content_type": "application/json",
+      "body": null,
+      "query_params": [
+        {
+          "name": "companyId",
+          "type": "uuid",
+          "required": true,
+          "description": "Company identifier"
+        },
+        {
+          "name": "scenarioId",
+          "type": "uuid",
+          "required": false,
+          "description": "Scenario identifier"
+        },
+        {
+          "name": "versionId",
+          "type": "uuid",
+          "required": false,
+          "description": "Version identifier"
+        },
+        {
+          "name": "periodId",
+          "type": "uuid",
+          "required": false,
+          "description": "Planning period identifier"
+        },
+        {
+          "name": "scopeRef",
+          "type": "uuid",
+          "required": false,
+          "description": "Scope bundle reference"
+        }
+      ],
+      "path_params": []
+    },
+    "response_schema": {
+      "success": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "capitalLadder": {
+                  "type": "array"
+                },
+                "returnMetrics": {
+                  "type": "object",
+                  "properties": {
+                    "irr": {
+                      "type": "number"
+                    },
+                    "moic": {
+                      "type": "number"
+                    },
+                    "paybackMonths": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "dilutionImpact": {
+                  "type": "object"
+                }
+              }
+            },
+            "meta": {
+              "type": "object",
+              "properties": {
+                "freshness": {
+                  "type": "string"
+                },
+                "governanceState": {
+                  "type": "string"
+                },
+                "computeRunId": {
+                  "type": "uuid"
+                },
+                "confidenceState": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "code": "MISSING_PLANNING_CONTEXT",
+          "status": 400,
+          "description": "Required planning context parameters missing"
+        },
+        {
+          "code": "STALE_COMPUTE_RESULT",
+          "status": 409,
+          "description": "Compute outputs are stale"
+        }
+      ]
+    },
+    "pagination": {
+      "supported": false
+    },
+    "rate_limit": {
+      "requests_per_minute": 120
+    },
+    "owner_doc": "FINANCIAL_MODEL.md"
+  }
+]

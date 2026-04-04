@@ -264,7 +264,7 @@ export default function AssumptionsManager() {
     setIsLoading(true);
     try {
       let result: any;
-      const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+      const scenarioId = ctx.scenarioId || '';
       
       switch(activeTab) {
         case 'demand':
@@ -410,7 +410,7 @@ export default function AssumptionsManager() {
       setIsLoading(false);
       setIsDirty(false);
     }
-  }, [activeTab, ctx.scenario, fetchFundingParameters]);
+  }, [activeTab, ctx.scenarioId, fetchFundingParameters]);
 
   /* Re-fetch on scenario or tab change */
   useEffect(() => {
@@ -499,7 +499,7 @@ export default function AssumptionsManager() {
     setIsSaving(true);
     setErrorMessage(null);
     try {
-      const scenarioId = ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`;
+      const scenarioId = ctx.scenarioId || '';
       const currentData = tabRows[activeTab];
 
       let result: any;
@@ -612,7 +612,7 @@ export default function AssumptionsManager() {
     } finally {
       setIsSaving(false);
     }
-  }, [activeTab, tabRows, ctx.scenario]);
+  }, [activeTab, tabRows, ctx.scenarioId]);
 
   const handleRunEngine = useCallback(async () => {
     setIsComputing(true);
@@ -625,7 +625,7 @@ export default function AssumptionsManager() {
 
       /* Step 2: Trigger compute via typed API helper */
       const { data: computeData, error: computeError } = await triggerCompute({
-        scenario_id: ctx.scenario === 'base' ? 'sc_base_001' : `sc_${ctx.scenario}_001`,
+        scenario_id: ctx.scenarioId || '',
         assumption_set_id: setInfo.setId,
         period_range_start: 'p_2026_01',
         period_range_end: 'p_2026_12',
@@ -865,7 +865,7 @@ export default function AssumptionsManager() {
 
           <AgGridReact
             ref={gridRef}
-            key={`${activeTab}-${ctx.scenario}`}
+            key={`${activeTab}-${ctx.scenarioId}`}
             rowData={isLoading ? [] : currentRows}
             columnDefs={currentCols}
             defaultColDef={defaultColDef}

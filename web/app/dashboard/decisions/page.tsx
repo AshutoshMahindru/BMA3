@@ -31,7 +31,7 @@ export default function DecisionMemory() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-[#1E5B9C]" /> Decision Memory Browser
         </h1>
-        <p className="text-sm text-gray-500 mt-1">{ctx.scopeLabel} — Institutional knowledge with full traceability</p>
+        <p className="text-sm text-gray-500 mt-1">{ctx.companyName} — Institutional knowledge with full traceability</p>
       </div>
       <div className="px-6 pb-8 space-y-4">
         {/* Timeline */}

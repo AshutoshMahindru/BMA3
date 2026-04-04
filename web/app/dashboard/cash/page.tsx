@@ -33,7 +33,7 @@ export default function CashFundingConsole() {
             <Banknote className="w-5 h-5 text-[#1E5B9C]" /> Cash & Funding Console
           </h1>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-            {ctx.scopeLabel} — {ctx.timePeriodLabel} — {ctx.scenarioLabel}
+            {ctx.companyName} — {ctx.timePeriodLabel} — {ctx.scenarioName}
             <DataFreshness />
           </p>
         </div>
