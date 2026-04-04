@@ -1,70 +1,133 @@
 "use client";
 
+import { useEffect, useState } from 'react';
+import { AlertCircle, Download, Lightbulb, Printer, SlidersHorizontal, Zap } from 'lucide-react';
 import { usePlanningContext } from '@/lib/planning-context';
-
-/* ══════════════════════════════════════════════════════════════════════════
-   S15: DRIVER EXPLAINABILITY CONSOLE
-   Wireframe v4.0: EBITDA Bridge waterfall (10 drivers, prior→current),
-   Driver Attribution table (10 rows, 5 cols), Formula Explorer (5 formulas)
-   ══════════════════════════════════════════════════════════════════════ */
-
-import { useState } from 'react';
-import { Lightbulb, ArrowRight, ChevronDown, Zap, BookOpen, Download, Printer } from 'lucide-react';
-import { exportCSV, exportPDF } from '@/lib/export';
+import { getAnalysisExplainability, getAnalysisSensitivity } from '@/lib/api-client';
 import DataFreshness from '@/components/data-freshness';
+import { exportCSV, exportPDF } from '@/lib/export';
+import { asArray, asRecord, formatMoney, formatPercent, titleCase, toNumber, toText } from '@/lib/phase5-utils';
 
-/* ── Output Metric Selector ──────────────────────────────────────────── */
-const metrics = ['EBITDA', 'Revenue', 'CM1', 'Gross Profit'];
+interface DriverRow {
+  name: string;
+  contribution: number;
+  percentage: number;
+  stage: string;
+  entityRef: string;
+}
 
-/* ── EBITDA Bridge Waterfall Data ────────────────────────────────────── */
-const bridgeData = [
-  { label: 'Prior EBITDA', value: 83000, type: 'anchor' as const },
-  { label: 'Volume Growth — JLT', value: 15200, type: 'positive' as const },
-  { label: 'Volume Growth — Marina', value: 8400, type: 'positive' as const },
-  { label: 'Price / Mix Optimization', value: 6800, type: 'positive' as const },
-  { label: 'Commission Renegotiation', value: 4200, type: 'positive' as const },
-  { label: 'New Kitchen (Downtown)', value: 3600, type: 'positive' as const },
-  { label: 'COGS Inflation', value: -3800, type: 'negative' as const },
-  { label: 'Labor Cost Increase', value: -4500, type: 'negative' as const },
-  { label: 'Marketing Spend Increase', value: -2400, type: 'negative' as const },
-  { label: 'Rent Escalation', value: -1500, type: 'negative' as const },
-  { label: 'Current EBITDA', value: 109000, type: 'anchor' as const },
-];
+interface SensitivityRow {
+  driver: string;
+  elasticity: number;
+  downside: number;
+  upside: number;
+  deltaPct: number;
+}
 
-/* ── Driver Attribution Table ────────────────────────────────────────── */
-const driverAttribution = [
-  { driver: 'Order Volume — JLT', contribution: 'AED 15,200', direction: '▲', pctImpact: '+18.3%', rootAssumption: 'Base Orders: 145/day', confidence: 82 },
-  { driver: 'Order Volume — Marina', contribution: 'AED 8,400', direction: '▲', pctImpact: '+10.1%', rootAssumption: 'Base Orders: 120/day', confidence: 78 },
-  { driver: 'ASP / Mix Optimization', contribution: 'AED 6,800', direction: '▲', pctImpact: '+8.2%', rootAssumption: 'AOV: AED 62 (+6.9%)', confidence: 88 },
-  { driver: 'Commission Rate', contribution: 'AED 4,200', direction: '▲', pctImpact: '+5.1%', rootAssumption: 'Talabat: 28% → 25%', confidence: 75 },
-  { driver: 'New Kitchen — Downtown', contribution: 'AED 3,600', direction: '▲', pctImpact: '+4.3%', rootAssumption: '95 orders/day from Mo 6', confidence: 65 },
-  { driver: 'COGS Inflation', contribution: '(AED 3,800)', direction: '▼', pctImpact: '-4.6%', rootAssumption: 'Food: +4.1%, Packaging: +8.7%', confidence: 85 },
-  { driver: 'Labor Cost', contribution: '(AED 4,500)', direction: '▼', pctImpact: '-5.4%', rootAssumption: 'Chef +6.3%, FTE reduction -7.1%', confidence: 80 },
-  { driver: 'Marketing Spend', contribution: '(AED 2,400)', direction: '▼', pctImpact: '-2.9%', rootAssumption: 'CAC: AED 35 (-16.7%)', confidence: 72 },
-  { driver: 'Rent Escalation', contribution: '(AED 1,500)', direction: '▼', pctImpact: '-1.8%', rootAssumption: 'Contractual 5% annual', confidence: 95 },
-  { driver: 'Net Impact', contribution: 'AED 26,000', direction: '▲', pctImpact: '+31.3%', rootAssumption: '—', confidence: 76 },
-];
+const METRICS = ['EBITDA', 'Revenue', 'Net Revenue', 'Cash Runway'];
 
-/* ── Formula Explorer ────────────────────────────────────────────────── */
-const formulas = [
-  { name: 'EBITDA', formula: 'Net Revenue − COGS − OPEX − Marketing − Labor', inputs: 'NR, COGS, OPEX, Marketing, Labor', output: 'AED 109,000' },
-  { name: 'Net Revenue', formula: 'GOV × (1 − Discount%) × (1 − Commission%)', inputs: 'GOV, Discount Rate, Commission Rate', output: 'AED 281,000' },
-  { name: 'CM1 (post-commission)', formula: 'NOV − (Platform Commission)', inputs: 'NOV, Commission Rate per Platform', output: 'AED 40.8 / order' },
-  { name: 'CM2 (post-COGS)', formula: 'CM1 − Food COGS − Packaging', inputs: 'CM1, Food %, Packaging per order', output: 'AED 24.5 / order' },
-  { name: 'Payback Period', formula: 'Kitchen CAPEX ÷ Monthly EBITDA Contribution', inputs: 'Build Cost, Monthly EBITDA', output: '18 months' },
-];
+function normalizeDrivers(raw: unknown): DriverRow[] {
+  const value = asRecord(raw);
+
+  return asArray(value.drivers).map((item) => {
+    const row = asRecord(item);
+    return {
+      name: toText(row.name, 'Driver'),
+      contribution: toNumber(row.contribution),
+      percentage: toNumber(row.percentage),
+      stage: toText(row.stage, 'analysis'),
+      entityRef: toText(row.entityRef, ''),
+    };
+  });
+}
+
+function normalizeSensitivity(raw: unknown): SensitivityRow[] {
+  const value = asRecord(raw);
+
+  return asArray(value.sensitivities).map((item) => {
+    const row = asRecord(item);
+    const impactRange = asRecord(row.impactRange);
+    return {
+      driver: toText(row.driver, 'Driver'),
+      elasticity: toNumber(row.elasticity),
+      downside: toNumber(impactRange.downside),
+      upside: toNumber(impactRange.upside),
+      deltaPct: toNumber(impactRange.deltaPct),
+    };
+  });
+}
 
 export default function DriverExplainability() {
   const ctx = usePlanningContext();
   const [selectedMetric, setSelectedMetric] = useState('EBITDA');
+  const [drivers, setDrivers] = useState<DriverRow[]>([]);
+  const [sensitivities, setSensitivities] = useState<SensitivityRow[]>([]);
+  const [totalEffect, setTotalEffect] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastFetched, setLastFetched] = useState<Date | null>(null);
 
-  const maxBridgeValue = Math.max(...bridgeData.filter(d => d.type !== 'anchor').map(d => Math.abs(d.value)));
-  const fmt = (v: number) => new Intl.NumberFormat('en-AE').format(Math.abs(v));
+  useEffect(() => {
+    if (!ctx.companyId) {
+      setDrivers([]);
+      setSensitivities([]);
+      setTotalEffect(0);
+      setLastFetched(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      getAnalysisExplainability({
+        companyId: ctx.companyId,
+        scenarioId: ctx.scenarioId || undefined,
+        periodId: ctx.periodStart || undefined,
+        targetMetric: selectedMetric,
+      }),
+      getAnalysisSensitivity({
+        companyId: ctx.companyId,
+        scenarioId: ctx.scenarioId || undefined,
+        targetMetric: selectedMetric,
+      }),
+    ])
+      .then(([explainabilityResult, sensitivityResult]) => {
+        if (cancelled) return;
+
+        const explainability = asRecord(explainabilityResult.data);
+        setDrivers(normalizeDrivers(explainability));
+        setTotalEffect(toNumber(explainability.totalEffect));
+        setSensitivities(normalizeSensitivity(sensitivityResult.data));
+        setLastFetched(new Date());
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        setError(loadError instanceof Error ? loadError.message : 'Failed to load explainability data');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ctx.companyId, ctx.scenarioId, ctx.periodStart, selectedMetric]);
+
+  const maxBridgeValue = Math.max(
+    ...drivers.map((driver) => Math.abs(driver.contribution)),
+    1,
+  );
+  const maxSensitivity = Math.max(
+    ...sensitivities.map((item) => Math.max(Math.abs(item.downside), Math.abs(item.upside))),
+    1,
+  );
 
   return (
     <div className="flex-1 flex flex-col">
-
-      {/* Page Header */}
       <div className="px-6 pt-6 pb-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
@@ -73,44 +136,42 @@ export default function DriverExplainability() {
               Driver Explainability Console
             </h1>
             <p className="text-sm text-gray-500 mt-1 flex items-center gap-3">
-              {ctx.companyName} — {ctx.scenarioName} — Month-over-Month Attribution
-              <DataFreshness />
+              {ctx.companyName} — {ctx.scenarioName}
+              <DataFreshness source={loading ? 'loading' : drivers.length > 0 || sensitivities.length > 0 ? 'api' : undefined} lastFetched={lastFetched} />
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Output Metric Toggle */}
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-              {metrics.map(m => (
+              {METRICS.map((metric) => (
                 <button
-                  key={m}
-                  onClick={() => setSelectedMetric(m)}
+                  key={metric}
+                  onClick={() => setSelectedMetric(metric)}
                   className={`px-3 py-1.5 rounded-md text-xs font-bold transition ${
-                    selectedMetric === m
+                    selectedMetric === metric
                       ? 'bg-[#1B2A4A] text-white shadow-sm'
                       : 'text-gray-500 hover:text-gray-800'
                   }`}
                 >
-                  {m}
+                  {metric}
                 </button>
               ))}
             </div>
-            {/* Export Buttons */}
             <button
-              onClick={() => {
-                const h = ['Driver', 'Contribution', 'Direction', '% Impact', 'Root Assumption', 'Confidence'];
-                const r = driverAttribution.map(d => [d.driver, d.contribution, d.direction, d.pctImpact, d.rootAssumption, d.confidence + '%']);
-                exportCSV(`Explainability_${ctx.scenarioName.replace(/ /g, '_')}`, h, r);
-              }}
+              onClick={() => exportCSV(
+                `Explainability_${selectedMetric.replace(/\s+/g, '_')}`,
+                ['Driver', 'Contribution', 'Contribution %', 'Stage'],
+                drivers.map((driver) => [driver.name, driver.contribution, driver.percentage, driver.stage]),
+              )}
               className="flex items-center gap-1.5 text-[10px] font-bold text-gray-600 bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50 transition shadow-sm"
             >
               <Download className="w-3.5 h-3.5" /> CSV
             </button>
             <button
-              onClick={() => {
-                const h = ['Driver', 'Contribution', '% Impact', 'Root Assumption', 'Confidence'];
-                const r = driverAttribution.map(d => [d.driver, d.contribution, d.pctImpact, d.rootAssumption, d.confidence + '%']);
-                exportPDF(`Driver Explainability — ${ctx.scenarioName}`, h, r);
-              }}
+              onClick={() => exportPDF(
+                `Driver Explainability — ${selectedMetric}`,
+                ['Driver', 'Contribution', 'Contribution %', 'Stage'],
+                drivers.map((driver) => [driver.name, driver.contribution, `${driver.percentage.toFixed(1)}%`, driver.stage]),
+              )}
               className="flex items-center gap-1.5 text-[10px] font-bold text-white bg-[#1B2A4A] px-3 py-2 rounded-lg hover:bg-[#263B5E] transition shadow-sm"
             >
               <Printer className="w-3.5 h-3.5" /> PDF
@@ -120,126 +181,156 @@ export default function DriverExplainability() {
       </div>
 
       <div className="px-6 pb-8 space-y-6">
-
-        {/* ═══════ EBITDA BRIDGE WATERFALL ═══════ */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-[#1E5B9C]" />
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              {selectedMetric} Bridge — Prior Period vs Current
-            </h3>
+        {!ctx.companyId && (
+          <div className="bg-white rounded-xl border border-gray-200 p-10 text-sm text-gray-400 shadow-sm">
+            Select a company and scenario to load live driver explainability.
           </div>
-          <div className="p-5">
-            <div className="space-y-2">
-              {bridgeData.map((item, idx) => {
-                const barWidth = item.type === 'anchor' ? 0 : (Math.abs(item.value) / maxBridgeValue) * 100;
-                return (
-                  <div key={idx} className={`flex items-center gap-3 py-2 px-3 rounded-lg ${
-                    item.type === 'anchor' ? 'bg-[#1B2A4A] text-white' :
-                    item.type === 'positive' ? 'bg-green-50/50 hover:bg-green-50' :
-                    'bg-red-50/50 hover:bg-red-50'
-                  } transition`}>
-                    <div className="w-48 shrink-0 text-xs font-semibold truncate">{item.label}</div>
-                    <div className="flex-1 flex items-center h-6">
-                      {item.type !== 'anchor' && (
-                        <div
-                          className={`h-5 rounded ${item.type === 'positive' ? 'bg-[#1A7A4A]' : 'bg-[#C0392B]'}`}
-                          style={{ width: `${barWidth}%`, minWidth: '2px' }}
-                        />
-                      )}
-                    </div>
-                    <div className={`w-28 text-right font-mono text-sm font-bold shrink-0 ${
-                      item.type === 'anchor' ? '' :
-                      item.type === 'positive' ? 'text-[#1A7A4A]' : 'text-[#C0392B]'
-                    }`}>
-                      {item.type === 'anchor' ? `AED ${fmt(item.value)}` :
-                       item.type === 'positive' ? `+AED ${fmt(item.value)}` : `(AED ${fmt(item.value)})`}
-                    </div>
-                  </div>
-                );
-              })}
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-5 shadow-sm">
+            <p className="text-sm font-semibold text-red-800">Explainability data could not be loaded</p>
+            <p className="text-xs text-red-600 mt-1">{error}</p>
+          </div>
+        )}
+
+        {!error && (drivers.length > 0 || sensitivities.length > 0) && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[
+                {
+                  label: 'Tracked Drivers',
+                  value: String(drivers.length),
+                  sub: 'Contributing signals returned',
+                },
+                {
+                  label: 'Net Effect',
+                  value: formatMoney(totalEffect),
+                  sub: `${selectedMetric} aggregate contribution`,
+                },
+                {
+                  label: 'Sensitivity Inputs',
+                  value: String(sensitivities.length),
+                  sub: 'Ranked by impact range',
+                },
+              ].map((card) => (
+                <div key={card.label} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{card.label}</p>
+                  <p className="text-2xl font-extrabold text-gray-900 mt-1">{card.value}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{card.sub}</p>
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
 
-        {/* ═══════ DRIVER ATTRIBUTION TABLE ═══════ */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              Driver Attribution Detail
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-[#D6E4F7]">
-                  {['Driver', 'Contribution', 'Direction', '% Impact', 'Root Assumption', 'Confidence'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {driverAttribution.map((row, idx) => {
-                  const isTotal = row.driver === 'Net Impact';
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                <Zap className="w-4 h-4 text-[#1E5B9C]" />
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                  {selectedMetric} Contribution Bridge
+                </h3>
+              </div>
+              <div className="p-5 space-y-2">
+                {drivers.length === 0 && (
+                  <p className="text-sm text-gray-400">No explainability rows were returned for this metric.</p>
+                )}
+                {drivers.map((driver) => {
+                  const barWidth = (Math.abs(driver.contribution) / maxBridgeValue) * 100;
+                  const positive = driver.contribution >= 0;
                   return (
-                    <tr key={idx} className={`hover:bg-blue-50/30 transition ${
-                      isTotal ? 'bg-blue-50 border-y-2 border-blue-300 font-bold' :
-                      idx % 2 === 1 ? 'bg-[#F4F5F7]' : ''
-                    }`}>
-                      <td className={`px-4 py-2.5 ${isTotal ? 'font-bold text-[#1B2A4A]' : 'font-semibold text-gray-800'}`}>{row.driver}</td>
-                      <td className={`px-4 py-2.5 font-mono ${row.direction === '▲' ? 'text-[#1A7A4A] font-bold' : 'text-[#C0392B] font-bold'}`}>{row.contribution}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`text-sm ${row.direction === '▲' ? 'text-[#1A7A4A]' : 'text-[#C0392B]'}`}>{row.direction}</span>
-                      </td>
-                      <td className={`px-4 py-2.5 font-mono font-bold ${row.pctImpact.startsWith('+') ? 'text-[#1A7A4A]' : 'text-[#C0392B]'}`}>{row.pctImpact}</td>
-                      <td className="px-4 py-2.5 text-gray-600">{row.rootAssumption}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center gap-2">
-                          <div className="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${row.confidence >= 80 ? 'bg-[#1A7A4A]' : row.confidence >= 60 ? 'bg-[#C47A1E]' : 'bg-[#C0392B]'}`}
-                              style={{ width: `${row.confidence}%` }} />
-                          </div>
-                          <span className="text-[10px] font-bold text-gray-500">{row.confidence}%</span>
-                        </div>
-                      </td>
-                    </tr>
+                    <div key={`${driver.name}-${driver.entityRef}`} className={`flex items-center gap-3 py-2 px-3 rounded-lg transition ${positive ? 'bg-green-50/50' : 'bg-red-50/50'}`}>
+                      <div className="w-48 shrink-0 text-xs font-semibold text-gray-800 truncate">{driver.name}</div>
+                      <div className="flex-1 flex items-center h-6">
+                        <div
+                          className={`h-5 rounded ${positive ? 'bg-[#1A7A4A]' : 'bg-[#C0392B]'}`}
+                          style={{ width: `${Math.max(barWidth, 2)}%` }}
+                        />
+                      </div>
+                      <div className={`w-32 text-right font-mono text-sm font-bold shrink-0 ${positive ? 'text-[#1A7A4A]' : 'text-[#C0392B]'}`}>
+                        {positive ? '+' : '-'}{formatMoney(Math.abs(driver.contribution))}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {/* ═══════ FORMULA EXPLORER ═══════ */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-[#1E5B9C]" />
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
-              Formula Explorer — Calculation Transparency
-            </h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="bg-[#D6E4F7]">
-                  {['Metric', 'Formula', 'Key Inputs', 'Current Output'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {formulas.map((f, idx) => (
-                  <tr key={idx} className={`hover:bg-blue-50/30 transition ${idx % 2 === 1 ? 'bg-[#F4F5F7]' : ''}`}>
-                    <td className="px-4 py-3 font-bold text-[#1B2A4A]">{f.name}</td>
-                    <td className="px-4 py-3 font-mono text-gray-700 text-[11px]">{f.formula}</td>
-                    <td className="px-4 py-3 text-gray-600">{f.inputs}</td>
-                    <td className="px-4 py-3 font-mono font-bold text-[#1B2A4A]">{f.output}</td>
-                  </tr>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Driver Attribution Detail</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-[#D6E4F7]">
+                      {['Driver', 'Contribution', 'Share', 'Stage', 'Entity Ref'].map((header) => (
+                        <th key={header} className="px-4 py-3 text-left text-[10px] font-bold text-[#1B2A4A] uppercase tracking-wider whitespace-nowrap">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {drivers.map((driver, index) => (
+                      <tr key={`${driver.entityRef}-${driver.name}`} className={index % 2 === 1 ? 'bg-[#F4F5F7]' : ''}>
+                        <td className="px-4 py-3 font-semibold text-gray-800">{driver.name}</td>
+                        <td className={`px-4 py-3 font-mono font-bold ${driver.contribution >= 0 ? 'text-[#1A7A4A]' : 'text-[#C0392B]'}`}>
+                          {driver.contribution >= 0 ? '+' : '-'}{formatMoney(Math.abs(driver.contribution))}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-gray-700">{formatPercent(driver.percentage)}</td>
+                        <td className="px-4 py-3 text-gray-600">{titleCase(driver.stage)}</td>
+                        <td className="px-4 py-3 font-mono text-[10px] text-gray-400">{driver.entityRef || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h3 className="text-sm font-bold text-gray-800 mb-1 flex items-center gap-2">
+                <SlidersHorizontal className="w-4 h-4 text-[#1E5B9C]" />
+                Sensitivity Envelope
+              </h3>
+              <p className="text-[11px] text-gray-400 mb-4">Downside and upside range sourced from live sensitivity analysis for the selected metric.</p>
+              <div className="space-y-3">
+                {sensitivities.length === 0 && (
+                  <p className="text-sm text-gray-400">No sensitivity rows are available for this metric yet.</p>
+                )}
+                {sensitivities.map((item) => (
+                  <div key={item.driver} className="flex items-center gap-3">
+                    <div className="w-44 text-right text-xs font-semibold text-gray-700 shrink-0 truncate">{item.driver}</div>
+                    <div className="flex-1 flex items-center h-7">
+                      <div className="flex-1 flex justify-end">
+                        <div
+                          className="h-6 bg-[#C0392B] rounded-l-md flex items-center justify-start px-1.5"
+                          style={{ width: `${(Math.abs(item.downside) / maxSensitivity) * 100}%` }}
+                        >
+                          <span className="text-[9px] font-bold text-white whitespace-nowrap">{formatMoney(Math.abs(item.downside))}</span>
+                        </div>
+                      </div>
+                      <div className="w-px h-8 bg-gray-400 shrink-0" />
+                      <div className="flex-1">
+                        <div
+                          className="h-6 bg-[#1A7A4A] rounded-r-md flex items-center justify-end px-1.5"
+                          style={{ width: `${(Math.abs(item.upside) / maxSensitivity) * 100}%` }}
+                        >
+                          <span className="text-[9px] font-bold text-white whitespace-nowrap">{formatMoney(item.upside)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-20 text-right text-[10px] font-bold text-gray-400">{formatPercent(item.deltaPct)}</div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-blue-800">
+                <strong>Live interpretation:</strong> {drivers[0]?.name || 'The leading driver'} is the largest contributor to {selectedMetric},
+                while {sensitivities[0]?.driver || 'the top sensitivity input'} has the widest stress range in the current planning scope.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

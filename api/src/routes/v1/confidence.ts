@@ -1,257 +1,447 @@
-import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
 import { validate, validateParams, validateQuery } from '../../middleware/validate';
+import {
+  asRecord,
+  confidenceStateFromLevel,
+  confidenceStateFromNumeric,
+  idSchema,
+  meta,
+  paginate,
+  safeNumber,
+  traceId,
+} from './_shared';
 
 const router = Router();
 
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
-
-const ConfidenceQuery = z.object({
+const PlanningQuery = z.object({
   companyId: idSchema,
   scenarioId: idSchema.optional(),
   versionId: idSchema.optional(),
   periodId: idSchema.optional(),
-  scopeRef: z.string().optional(),
+  scopeRef: idSchema.optional(),
 });
 
-const ListQuery = z.object({
-  companyId: idSchema,
-  scenarioId: idSchema.optional(),
-  versionId: idSchema.optional(),
-  periodId: idSchema.optional(),
-  scopeRef: z.string().optional(),
+const EvidenceListQuery = PlanningQuery.extend({
   entityType: z.string().optional(),
-  entityId: z.string().optional(),
-  status: z.string().optional(),
+  entityId: idSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const EvidenceCreateBody = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().optional(),
+  entityType: z.string().trim().min(1),
+  entityId: idSchema,
+  sourceUrl: z.string().optional(),
+  quality: z.string().optional(),
+});
+
+const AssessmentListQuery = PlanningQuery.extend({
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
 
 const AssessmentCreateBody = z.object({
-  companyId: idSchema,
   entityType: z.string().trim().min(1),
   entityId: idSchema,
-  confidenceLevel: z.enum(['high', 'medium', 'low', 'unknown']).optional(),
-  numericScore: z.number().min(0).max(100).optional(),
+  confidenceLevel: z.string().trim().min(1),
   rationale: z.string().optional(),
+  evidenceRefs: z.array(idSchema).optional(),
 });
 
-const AssessmentUpdateBody = z.object({
-  confidenceLevel: z.enum(['high', 'medium', 'low', 'unknown']).optional(),
-  numericScore: z.number().min(0).max(100).optional(),
+const AssessmentPatchBody = z.object({
+  confidenceLevel: z.string().trim().min(1).optional(),
   rationale: z.string().optional(),
+  evidenceRefs: z.array(idSchema).optional(),
 });
 
-const EvidenceCreateBody = z.object({
-  companyId: idSchema,
-  title: z.string().trim().min(1).max(300),
-  sourceType: z.string().trim().min(1),
-  sourceUrl: z.string().optional(),
-  entityType: z.string().optional(),
-  entityId: z.string().optional(),
+const DqiCreateBody = z.object({
+  companyId: idSchema.optional(),
+  scenarioId: idSchema.optional(),
+  factors: z.array(z.object({
+    name: z.string().trim().min(1),
+    score: z.coerce.number(),
+    notes: z.string().optional(),
+  })).min(1),
 });
 
-const DqiBody = z.object({
-  companyId: idSchema,
-  entityType: z.string().trim().min(1),
-  entityId: idSchema,
-  sourceQualityScore: z.number().min(0).max(100).optional(),
-  freshnessScore: z.number().min(0).max(100).optional(),
-  completenessScore: z.number().min(0).max(100).optional(),
-  relevanceScore: z.number().min(0).max(100).optional(),
-  granularityScore: z.number().min(0).max(100).optional(),
-  consistencyScore: z.number().min(0).max(100).optional(),
-  traceabilityScore: z.number().min(0).max(100).optional(),
+const ResearchTasksQuery = PlanningQuery.extend({
+  status: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
 });
 
 const ResearchTaskCreateBody = z.object({
-  companyId: idSchema,
-  entityType: z.string().trim().min(1),
-  entityId: idSchema,
-  title: z.string().trim().min(1).max(300),
+  title: z.string().trim().min(1),
+  description: z.string().optional(),
   assignee: z.string().optional(),
   dueDate: z.string().optional(),
+  linkedEntityType: z.string().optional(),
+  linkedEntityId: idSchema.optional(),
+  companyId: idSchema.optional(),
 });
 
-const ResearchTaskUpdateBody = z.object({
-  status: z.enum(['open', 'in_progress', 'completed', 'cancelled']).optional(),
+const ResearchTaskPatchBody = z.object({
+  title: z.string().optional(),
+  status: z.string().optional(),
   assignee: z.string().optional(),
-  title: z.string().trim().min(1).max(300).optional(),
+  notes: z.string().optional(),
 });
 
-const AssessmentIdParam = z.object({ assessmentId: idSchema });
-const EvidenceIdParam = z.object({ evidenceId: idSchema });
-const TaskIdParam = z.object({ taskId: idSchema });
+const EvidenceParams = z.object({ evidenceId: idSchema });
+const AssessmentParams = z.object({ assessmentId: idSchema });
+const TaskParams = z.object({ taskId: idSchema });
 
-function traceId(req: Request): string {
-  return (req.headers['x-trace-id'] as string) || 'no-trace-id';
+async function resolveEntityScope(entityType: string, entityId: string): Promise<{ companyId: string; scenarioId?: string | null; versionId?: string | null } | null> {
+  const normalized = entityType.trim().toLowerCase();
+
+  if (normalized === 'company') {
+    const company = await db.query(
+      `SELECT id
+         FROM companies
+        WHERE id::text = $1
+          AND is_deleted = FALSE`,
+      [entityId],
+    );
+    return company.rowCount ? { companyId: company.rows[0].id } : null;
+  }
+
+  if (normalized === 'scenario') {
+    const scenario = await db.query(
+      `SELECT company_id, id AS scenario_id
+         FROM scenarios
+        WHERE id::text = $1
+          AND is_deleted = FALSE`,
+      [entityId],
+    );
+    return scenario.rowCount ? { companyId: scenario.rows[0].company_id, scenarioId: scenario.rows[0].scenario_id } : null;
+  }
+
+  if (normalized === 'version') {
+    const version = await db.query(
+      `SELECT company_id, scenario_id, id AS version_id
+         FROM plan_versions
+        WHERE id::text = $1
+          AND is_deleted = FALSE`,
+      [entityId],
+    );
+    return version.rowCount
+      ? { companyId: version.rows[0].company_id, scenarioId: version.rows[0].scenario_id, versionId: version.rows[0].version_id }
+      : null;
+  }
+
+  if (normalized === 'assumption' || normalized === 'assumption_set') {
+    const assumption = await db.query(
+      `SELECT COALESCE(aset.company_id, s.company_id) AS company_id,
+              aset.scenario_id,
+              aset.version_id
+         FROM assumption_sets aset
+         JOIN scenarios s
+           ON s.id = aset.scenario_id
+        WHERE aset.id::text = $1
+          AND aset.is_deleted = FALSE
+          AND s.is_deleted = FALSE`,
+      [entityId],
+    );
+    return assumption.rowCount
+      ? { companyId: assumption.rows[0].company_id, scenarioId: assumption.rows[0].scenario_id, versionId: assumption.rows[0].version_id }
+      : null;
+  }
+
+  if (normalized === 'decision' || normalized === 'decision_record') {
+    const decision = await db.query(
+      `SELECT COALESCE(dr.company_id, pv.company_id) AS company_id,
+              COALESCE(dr.scenario_id, pv.scenario_id) AS scenario_id,
+              COALESCE(dr.version_id, dr.plan_version_id) AS version_id
+         FROM decision_records dr
+         LEFT JOIN plan_versions pv
+           ON pv.id = COALESCE(dr.version_id, dr.plan_version_id)
+        WHERE dr.id::text = $1
+          AND COALESCE(dr.is_deleted, FALSE) = FALSE`,
+      [entityId],
+    );
+    return decision.rowCount
+      ? { companyId: decision.rows[0].company_id, scenarioId: decision.rows[0].scenario_id, versionId: decision.rows[0].version_id }
+      : null;
+  }
+
+  if (normalized === 'compute' || normalized === 'compute_run') {
+    const computeRun = await db.query(
+      `SELECT company_id, scenario_id, version_id
+         FROM compute_runs
+        WHERE id::text = $1`,
+      [entityId],
+    );
+    return computeRun.rowCount
+      ? { companyId: computeRun.rows[0].company_id, scenarioId: computeRun.rows[0].scenario_id, versionId: computeRun.rows[0].version_id }
+      : null;
+  }
+
+  return null;
 }
 
-function meta(extra?: Record<string, unknown>) {
-  return {
-    freshness: { source: 'database', timestamp: new Date().toISOString() },
-    ...(extra || {}),
-  };
+async function resolveCompanyTenant(companyId: string): Promise<string | null> {
+  const company = await db.query(
+    `SELECT tenant_id
+       FROM companies
+      WHERE id::text = $1
+        AND is_deleted = FALSE`,
+    [companyId],
+  );
+  return company.rowCount ? String(company.rows[0].tenant_id) : null;
 }
 
-function mapConfidenceState(level: string): string {
-  const mapping: Record<string, string> = { high: 'high', medium: 'medium', low: 'low', unknown: 'unknown' };
-  return mapping[level] || 'unknown';
-}
-
-// ─── GET /summary ───
-router.get('/summary', validateQuery(ConfidenceQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/summary', validateQuery(PlanningQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId } = req.query as unknown as z.infer<typeof ConfidenceQuery>;
+    const { companyId } = req.query as unknown as z.infer<typeof PlanningQuery>;
 
-    const assessments = await db.query(
-      `SELECT state::text, COUNT(*)::int AS cnt, AVG(COALESCE(numeric_score, 0))::float8 AS avg_score
-         FROM confidence_assessments
-        WHERE company_id::text = $1
-        GROUP BY state`,
-      [companyId],
-    );
+    const [assessments, evidenceCount] = await Promise.all([
+      db.query(
+        `SELECT assessment_id, entity_type, entity_id, state::text AS state,
+                COALESCE(numeric_score, 0)::float8 AS numeric_score,
+                COALESCE(evidence_count, 0)::int AS evidence_count,
+                updated_at
+           FROM confidence_assessments
+          WHERE company_id::text = $1
+          ORDER BY COALESCE(numeric_score, 0) ASC, updated_at DESC`,
+        [companyId],
+      ),
+      db.query(
+        `SELECT COUNT(*)::int AS count
+           FROM evidence_items
+          WHERE company_id::text = $1`,
+        [companyId],
+      ),
+    ]);
 
-    const byStage: Record<string, { count: number; avgScore: number }> = {};
-    let totalCount = 0;
-    let weightedSum = 0;
-    for (const row of assessments.rows as Array<{ state: string; cnt: number; avg_score: number }>) {
-      byStage[row.state] = { count: row.cnt, avgScore: Number(row.avg_score.toFixed(1)) };
-      totalCount += row.cnt;
-      weightedSum += row.avg_score * row.cnt;
-    }
+    const rows = assessments.rows as Array<any>;
+    const overallScore = rows.length
+      ? rows.reduce((sum, row) => sum + safeNumber(row.numeric_score), 0) / rows.length
+      : 0;
 
-    const overallScore = totalCount > 0 ? weightedSum / totalCount : 0;
-    const overallConfidence = overallScore >= 75 ? 'high' : overallScore >= 50 ? 'medium' : overallScore > 0 ? 'low' : 'unknown';
+    const byStage = rows.reduce((acc: Record<string, { score: number; count: number }>, row) => {
+      const key = String(row.entity_type || 'unknown');
+      const current = acc[key] || { score: 0, count: 0 };
+      current.score += safeNumber(row.numeric_score);
+      current.count += 1;
+      acc[key] = current;
+      return acc;
+    }, {});
 
-    const lowItems = await db.query(
-      `SELECT assessment_id, entity_type, entity_id, numeric_score
-         FROM confidence_assessments
-        WHERE company_id::text = $1 AND (numeric_score IS NOT NULL AND numeric_score < 50)
-        ORDER BY numeric_score ASC LIMIT 10`,
-      [companyId],
-    );
-
-    const evidenceCount = await db.query(
-      `SELECT COUNT(*)::int AS cnt FROM evidence_items WHERE company_id::text = $1`,
-      [companyId],
-    );
+    const normalizedByStage = Object.entries(byStage).reduce((acc: Record<string, unknown>, [key, value]) => {
+      acc[key] = {
+        confidenceLevel: confidenceStateFromNumeric(value.score / Math.max(value.count, 1)),
+        averageScore: Math.round(value.score / Math.max(value.count, 1)),
+        count: value.count,
+      };
+      return acc;
+    }, {});
 
     res.json({
       data: {
-        overallConfidence,
-        byStage,
-        lowConfidenceItems: lowItems.rows.map((r: any) => ({ assessmentId: r.assessment_id, entityType: r.entity_type, entityId: r.entity_id, score: Number(r.numeric_score) })),
-        evidenceCount: evidenceCount.rows[0]?.cnt || 0,
+        overallConfidence: confidenceStateFromNumeric(overallScore),
+        byStage: normalizedByStage,
+        lowConfidenceItems: rows
+          .filter((row) => ['low', 'estimated', 'unknown'].includes(String(row.state || '').toLowerCase()))
+          .slice(0, 8)
+          .map((row) => ({
+            assessmentId: row.assessment_id,
+            entityType: row.entity_type,
+            entityId: row.entity_id,
+            confidenceLevel: row.state,
+            evidenceCount: row.evidence_count,
+            updatedAt: row.updated_at,
+          })),
+        evidenceCount: safeNumber(evidenceCount.rows[0]?.count),
       },
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /evidence ───
-router.get('/evidence', validateQuery(ListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/evidence', validateQuery(EvidenceListQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, entityType, entityId, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof ListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = 'ei.company_id::text = $1';
+    const { companyId, entityType, entityId } = req.query as unknown as z.infer<typeof EvidenceListQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
 
-    if (entityType && entityId) {
-      where += ` AND EXISTS (
-        SELECT 1 FROM evidence_links el
-        WHERE el.evidence_id = ei.evidence_id
-          AND el.entity_type = $${params.length + 1}
-          AND el.entity_id::text = $${params.length + 2}
-      )`;
-      params.push(entityType, entityId);
+    if (entityType) {
+      clauses += ` AND el.entity_type = $${idx++}`;
+      params.push(entityType);
+    }
+    if (entityId) {
+      clauses += ` AND el.entity_id::text = $${idx++}`;
+      params.push(entityId);
     }
 
+    params.push(limit, offset);
+
     const { rows } = await db.query(
-      `SELECT ei.evidence_id, ei.title, ei.source_type, ei.created_at, ei.source_url
+      `SELECT ei.evidence_id,
+              ei.title,
+              ei.source_type,
+              ei.source_url,
+              ei.created_at,
+              ei.metadata,
+              el.entity_type,
+              el.entity_id
          FROM evidence_items ei
-        WHERE ${where}
+         LEFT JOIN evidence_links el
+           ON el.evidence_id = ei.evidence_id
+        WHERE ei.company_id::text = $1
+          ${clauses}
         ORDER BY ei.created_at DESC
-        LIMIT $2 OFFSET $3`,
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        evidenceId: r.evidence_id,
-        title: r.title,
-        type: r.source_type,
-        attachedTo: {},
-        createdAt: r.created_at,
-        quality: 'unscored',
-      })),
-      meta: meta({ companyId }),
+      data: rows.map((row: any) => {
+        const metadata = asRecord(row.metadata);
+        return {
+          evidenceId: row.evidence_id,
+          title: row.title,
+          type: row.source_type,
+          attachedTo: {
+            entityType: row.entity_type,
+            entityId: row.entity_id,
+          },
+          createdAt: row.created_at,
+          quality: String(metadata.quality || 'unknown'),
+        };
+      }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /evidence ───
 router.post('/evidence', validate(EvidenceCreateBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
-    const { companyId, title, sourceType, sourceUrl, entityType, entityId } = req.body as z.infer<typeof EvidenceCreateBody>;
-    const id = crypto.randomUUID();
+    const { title, description, entityType, entityId, sourceUrl, quality } = req.body as z.infer<typeof EvidenceCreateBody>;
+    const scope = await resolveEntityScope(entityType, entityId);
 
-    await db.query(
-      `INSERT INTO evidence_items (evidence_id, company_id, source_type, source_url, title)
-       VALUES ($1, $2::uuid, $3, $4, $5)`,
-      [id, companyId, sourceType, sourceUrl || null, title],
-    );
-
-    if (entityType && entityId) {
-      await db.query(
-        `INSERT INTO evidence_links (id, evidence_id, entity_type, entity_id)
-         VALUES ($1, $2::uuid, $3, $4::uuid)`,
-        [crypto.randomUUID(), id, entityType, entityId],
-      );
+    if (!scope) {
+      return res.status(404).json({
+        error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${entityId} could not be resolved`, trace_id: traceId(req) },
+      });
     }
 
-    res.status(201).json({ data: { evidenceId: id, title, createdAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
-
-// ─── GET /evidence/:evidenceId ───
-router.get('/evidence/:evidenceId', validateParams(EvidenceIdParam), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { evidenceId } = req.params as z.infer<typeof EvidenceIdParam>;
-    const { rows } = await db.query(
-      `SELECT ei.evidence_id, ei.title, ei.source_type, ei.source_url, ei.method_note, ei.created_at
-         FROM evidence_items ei
-        WHERE ei.evidence_id::text = $1`,
-      [evidenceId],
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ error: { code: 'EVIDENCE_NOT_FOUND', message: `Evidence ${evidenceId} not found`, trace_id: traceId(req) } });
+    const tenantId = await resolveCompanyTenant(scope.companyId);
+    if (!tenantId) {
+      return res.status(404).json({
+        error: { code: 'COMPANY_NOT_FOUND', message: `Company ${scope.companyId} not found`, trace_id: traceId(req) },
+      });
     }
-    const r = rows[0];
-    res.json({
+
+    await client.query('BEGIN');
+    started = true;
+
+    const created = await client.query(
+      `INSERT INTO evidence_items
+         (company_id, source_type, source_name, source_url, title, metadata)
+       VALUES ($1, 'manual', 'BMA3', $2, $3, $4::jsonb)
+       RETURNING evidence_id, title, created_at`,
+      [
+        scope.companyId,
+        sourceUrl || null,
+        title,
+        JSON.stringify({
+          description: description || null,
+          quality: quality || 'medium',
+          tenantId,
+        }),
+      ],
+    );
+
+    await client.query(
+      `INSERT INTO evidence_links (evidence_id, entity_type, entity_id)
+       VALUES ($1, $2, $3)`,
+      [created.rows[0].evidence_id, entityType, entityId],
+    );
+
+    await client.query('COMMIT');
+
+    res.status(201).json({
       data: {
-        evidenceId: r.evidence_id,
-        title: r.title,
-        description: r.method_note || '',
-        entityType: '',
-        entityId: '',
-        sourceUrl: r.source_url || '',
-        quality: 'unscored',
-        createdAt: r.created_at,
+        evidenceId: created.rows[0].evidence_id,
+        title: created.rows[0].title,
+        createdAt: created.rows[0].created_at,
       },
       meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
+    next(error);
+  } finally {
+    client.release();
+  }
 });
 
-// ─── GET /assessments ───
-router.get('/assessments', validateQuery(ListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/evidence/:evidenceId', validateParams(EvidenceParams), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof ListQuery>;
+    const { evidenceId } = req.params as z.infer<typeof EvidenceParams>;
+    const result = await db.query(
+      `SELECT ei.evidence_id,
+              ei.title,
+              ei.source_url,
+              ei.created_at,
+              ei.metadata,
+              el.entity_type,
+              el.entity_id
+         FROM evidence_items ei
+         LEFT JOIN evidence_links el
+           ON el.evidence_id = ei.evidence_id
+        WHERE ei.evidence_id::text = $1`,
+      [evidenceId],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'EVIDENCE_NOT_FOUND', message: `Evidence ${evidenceId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const row = result.rows[0] as any;
+    const metadata = asRecord(row.metadata);
+
+    res.json({
+      data: {
+        evidenceId: row.evidence_id,
+        title: row.title,
+        description: String(metadata.description || ''),
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        sourceUrl: row.source_url || '',
+        quality: String(metadata.quality || 'unknown'),
+        createdAt: row.created_at,
+      },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/assessments', validateQuery(AssessmentListQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId } = req.query as unknown as z.infer<typeof AssessmentListQuery>;
+    const { limit, offset } = paginate(req.query);
     const { rows } = await db.query(
-      `SELECT assessment_id, entity_type, entity_id, state::text AS confidence_level, evidence_count, updated_at
+      `SELECT assessment_id, entity_type, entity_id, state::text AS state,
+              COALESCE(evidence_count, 0)::int AS evidence_count, updated_at
          FROM confidence_assessments
         WHERE company_id::text = $1
         ORDER BY updated_at DESC
@@ -260,211 +450,416 @@ router.get('/assessments', validateQuery(ListQuery), async (req: Request, res: R
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        assessmentId: r.assessment_id,
-        entityType: r.entity_type,
-        entityId: r.entity_id,
-        confidenceLevel: r.confidence_level,
-        evidenceCount: r.evidence_count || 0,
-        updatedAt: r.updated_at,
+      data: rows.map((row: any) => ({
+        assessmentId: row.assessment_id,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        confidenceLevel: row.state,
+        evidenceCount: row.evidence_count,
+        updatedAt: row.updated_at,
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /assessments ───
 router.post('/assessments', validate(AssessmentCreateBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, entityType, entityId, confidenceLevel, numericScore, rationale } = req.body as z.infer<typeof AssessmentCreateBody>;
-    const id = crypto.randomUUID();
-    const state = mapConfidenceState(confidenceLevel || 'unknown');
+    const { entityType, entityId, confidenceLevel, rationale, evidenceRefs } = req.body as z.infer<typeof AssessmentCreateBody>;
+    const scope = await resolveEntityScope(entityType, entityId);
 
-    await db.query(
-      `INSERT INTO confidence_assessments (assessment_id, company_id, entity_type, entity_id, state, numeric_score, rationale)
-       VALUES ($1, $2::uuid, $3, $4::uuid, $5::confidence_state, $6, $7)`,
-      [id, companyId, entityType, entityId, state, numericScore ?? null, rationale || null],
-    );
-
-    res.status(201).json({ data: { assessmentId: id, confidenceLevel: state, createdAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
-
-// ─── PATCH /assessments/:assessmentId ───
-router.patch('/assessments/:assessmentId', validateParams(AssessmentIdParam), validate(AssessmentUpdateBody), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { assessmentId } = req.params as z.infer<typeof AssessmentIdParam>;
-    const { confidenceLevel, numericScore, rationale } = req.body as z.infer<typeof AssessmentUpdateBody>;
-    const sets: string[] = ['updated_at = NOW()'];
-    const params: unknown[] = [];
-    if (confidenceLevel !== undefined) { params.push(mapConfidenceState(confidenceLevel)); sets.push(`state = $${params.length}::confidence_state`); }
-    if (numericScore !== undefined) { params.push(numericScore); sets.push(`numeric_score = $${params.length}`); }
-    if (rationale !== undefined) { params.push(rationale); sets.push(`rationale = $${params.length}`); }
-    params.push(assessmentId);
-
-    const { rowCount } = await db.query(`UPDATE confidence_assessments SET ${sets.join(', ')} WHERE assessment_id::text = $${params.length}`, params);
-    if (Number(rowCount || 0) === 0) {
-      return res.status(404).json({ error: { code: 'ASSESSMENT_NOT_FOUND', message: `Assessment ${assessmentId} not found`, trace_id: traceId(req) } });
+    if (!scope) {
+      return res.status(404).json({
+        error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${entityId} could not be resolved`, trace_id: traceId(req) },
+      });
     }
-    res.json({ data: { assessmentId, confidenceLevel: confidenceLevel || '', updatedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
 
-// ─── GET /dqi ───
-router.get('/dqi', validateQuery(ConfidenceQuery), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { companyId } = req.query as unknown as z.infer<typeof ConfidenceQuery>;
-
-    const { rows } = await db.query(
-      `SELECT dqi_score_id, entity_type, entity_id, overall_score,
-              source_quality_score, freshness_score, completeness_score,
-              relevance_score, granularity_score, consistency_score, traceability_score
-         FROM dqi_scores ds
-         WHERE EXISTS (
-           SELECT 1 FROM confidence_assessments ca
-           WHERE ca.entity_type = ds.entity_type AND ca.entity_id = ds.entity_id AND ca.company_id::text = $1
-         )
-         ORDER BY ds.computed_at DESC`,
-      [companyId],
+    const { state, numericScore } = confidenceStateFromLevel(confidenceLevel);
+    const created = await db.query(
+      `INSERT INTO confidence_assessments
+         (company_id, entity_type, entity_id, state, numeric_score, status, rationale, evidence_count)
+       VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7)
+       RETURNING assessment_id, state::text AS state, created_at`,
+      [scope.companyId, entityType, entityId, state, numericScore, rationale || null, (evidenceRefs || []).length],
     );
 
-    const totalScore = rows.length > 0
-      ? rows.reduce((sum: number, r: any) => sum + Number(r.overall_score || 0), 0) / rows.length
-      : 0;
+    res.status(201).json({
+      data: {
+        assessmentId: created.rows[0].assessment_id,
+        confidenceLevel: created.rows[0].state,
+        createdAt: created.rows[0].created_at,
+      },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch('/assessments/:assessmentId', validateParams(AssessmentParams), validate(AssessmentPatchBody), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { assessmentId } = req.params as z.infer<typeof AssessmentParams>;
+    const existing = await db.query(
+      `SELECT assessment_id, state::text AS state, rationale, evidence_count
+         FROM confidence_assessments
+        WHERE assessment_id::text = $1`,
+      [assessmentId],
+    );
+
+    if (existing.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'ASSESSMENT_NOT_FOUND', message: `Assessment ${assessmentId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const body = req.body as z.infer<typeof AssessmentPatchBody>;
+    const level = body.confidenceLevel
+      ? confidenceStateFromLevel(body.confidenceLevel)
+      : { state: existing.rows[0].state, numericScore: null as number | null };
+
+    const updated = await db.query(
+      `UPDATE confidence_assessments
+          SET state = $2,
+              numeric_score = COALESCE($3, numeric_score),
+              rationale = $4,
+              evidence_count = $5,
+              updated_at = NOW()
+        WHERE assessment_id::text = $1
+        RETURNING assessment_id, state::text AS state, updated_at`,
+      [
+        assessmentId,
+        level.state,
+        level.numericScore,
+        body.rationale ?? existing.rows[0].rationale,
+        body.evidenceRefs ? body.evidenceRefs.length : existing.rows[0].evidence_count,
+      ],
+    );
 
     res.json({
       data: {
-        overallDqi: Number(totalScore.toFixed(1)),
-        factors: rows.map((r: any) => ({
-          dqiScoreId: r.dqi_score_id,
-          entityType: r.entity_type,
-          entityId: r.entity_id,
-          overallScore: Number(r.overall_score || 0),
-          sourceQuality: Number(r.source_quality_score || 0),
-          freshness: Number(r.freshness_score || 0),
-          completeness: Number(r.completeness_score || 0),
-          relevance: Number(r.relevance_score || 0),
-          granularity: Number(r.granularity_score || 0),
-          consistency: Number(r.consistency_score || 0),
-          traceability: Number(r.traceability_score || 0),
-        })),
+        assessmentId: updated.rows[0].assessment_id,
+        confidenceLevel: updated.rows[0].state,
+        updatedAt: updated.rows[0].updated_at,
       },
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /dqi ───
-router.post('/dqi', validate(DqiBody), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/dqi', validateQuery(PlanningQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const body = req.body as z.infer<typeof DqiBody>;
-    const scores = [
-      body.sourceQualityScore ?? 0, body.freshnessScore ?? 0, body.completenessScore ?? 0,
-      body.relevanceScore ?? 0, body.granularityScore ?? 0, body.consistencyScore ?? 0, body.traceabilityScore ?? 0,
-    ];
-    const overallScore = scores.reduce((s, v) => s + v, 0) / scores.length;
+    const { companyId, scenarioId } = req.query as unknown as z.infer<typeof PlanningQuery>;
+    const entityType = scenarioId ? 'scenario' : 'company';
+    const entityId = scenarioId || companyId;
 
-    await db.query(
-      `INSERT INTO dqi_scores (dqi_score_id, entity_type, entity_id, source_quality_score, freshness_score, completeness_score, relevance_score, granularity_score, consistency_score, traceability_score, overall_score)
-       VALUES ($1, $2, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11)`,
-      [crypto.randomUUID(), body.entityType, body.entityId, body.sourceQualityScore ?? null, body.freshnessScore ?? null, body.completenessScore ?? null, body.relevanceScore ?? null, body.granularityScore ?? null, body.consistencyScore ?? null, body.traceabilityScore ?? null, overallScore],
+    const result = await db.query(
+      `SELECT source_quality_score, freshness_score, completeness_score, relevance_score,
+              granularity_score, consistency_score, traceability_score, overall_score
+         FROM dqi_scores
+        WHERE entity_type = $1
+          AND entity_id::text = $2
+        ORDER BY computed_at DESC, created_at DESC
+        LIMIT 1`,
+      [entityType, entityId],
     );
 
-    res.json({ data: { overallDqi: Number(overallScore.toFixed(1)), updatedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+    const row = result.rows[0] || {};
+    const factors = [
+      { name: 'source_quality', score: safeNumber(row.source_quality_score), weight: 1 },
+      { name: 'freshness', score: safeNumber(row.freshness_score), weight: 1 },
+      { name: 'completeness', score: safeNumber(row.completeness_score), weight: 1 },
+      { name: 'relevance', score: safeNumber(row.relevance_score), weight: 1 },
+      { name: 'granularity', score: safeNumber(row.granularity_score), weight: 1 },
+      { name: 'consistency', score: safeNumber(row.consistency_score), weight: 1 },
+      { name: 'traceability', score: safeNumber(row.traceability_score), weight: 1 },
+    ];
+
+    const overallDqi = safeNumber(row.overall_score) || (
+      factors.reduce((sum, factor) => sum + factor.score, 0) / Math.max(factors.length, 1)
+    );
+
+    res.json({
+      data: { overallDqi, factors },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /research-tasks ───
-router.get('/research-tasks', validateQuery(ListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/dqi', validate(DqiCreateBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, status, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof ListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = 'rt.company_id::text = $1';
-    if (status) { where += ` AND rt.status = $${params.length + 1}`; params.push(status); }
+    const { companyId, scenarioId, factors } = req.body as z.infer<typeof DqiCreateBody>;
+    const entityType = scenarioId ? 'scenario' : 'company';
+    const entityId = scenarioId || companyId;
+
+    if (!entityId) {
+      return res.status(400).json({
+        error: { code: 'MISSING_COMPANY_CONTEXT', message: 'companyId or scenarioId is required', trace_id: traceId(req) },
+      });
+    }
+
+    const factorMap = factors.reduce((acc: Record<string, number>, factor) => {
+      acc[factor.name.toLowerCase()] = safeNumber(factor.score);
+      return acc;
+    }, {});
+    const scores = [
+      factorMap.source_quality,
+      factorMap.freshness,
+      factorMap.completeness,
+      factorMap.relevance,
+      factorMap.granularity,
+      factorMap.consistency,
+      factorMap.traceability,
+    ].map(safeNumber);
+    const overallDqi = scores.reduce((sum, score) => sum + score, 0) / Math.max(scores.length, 1);
+
+    const updated = await db.query(
+      `INSERT INTO dqi_scores
+         (entity_type, entity_id, source_quality_score, freshness_score, completeness_score, relevance_score, granularity_score, consistency_score, traceability_score, overall_score, computed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+       RETURNING created_at`,
+      [
+        entityType,
+        entityId,
+        scores[0],
+        scores[1],
+        scores[2],
+        scores[3],
+        scores[4],
+        scores[5],
+        scores[6],
+        overallDqi,
+      ],
+    );
+
+    res.status(201).json({
+      data: {
+        overallDqi,
+        updatedAt: updated.rows[0].created_at,
+      },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/research-tasks', validateQuery(ResearchTasksQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId, status } = req.query as unknown as z.infer<typeof ResearchTasksQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
+
+    if (status) {
+      clauses += ` AND status = $${idx++}`;
+      params.push(status);
+    }
+
+    params.push(limit, offset);
 
     const { rows } = await db.query(
-      `SELECT rt.id, rt.title, rt.assignee, rt.due_date, rt.status, rt.entity_type, rt.entity_id
-         FROM research_tasks rt
-        WHERE ${where}
-        ORDER BY rt.created_at DESC
-        LIMIT $2 OFFSET $3`,
+      `SELECT id, title, assignee, due_date, status, entity_type, entity_id
+         FROM research_tasks
+        WHERE company_id::text = $1
+          ${clauses}
+        ORDER BY due_date ASC NULLS LAST, created_at DESC
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        taskId: r.id,
-        title: r.title,
-        assignee: r.assignee || '',
-        dueDate: r.due_date || '',
-        status: r.status,
-        linkedEntity: { entityType: r.entity_type, entityId: r.entity_id },
+      data: rows.map((row: any) => ({
+        taskId: row.id,
+        title: row.title,
+        assignee: row.assignee || '',
+        dueDate: row.due_date,
+        status: row.status,
+        linkedEntity: {
+          entityType: row.entity_type,
+          entityId: row.entity_id,
+        },
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /research-tasks ───
 router.post('/research-tasks', validate(ResearchTaskCreateBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, entityType, entityId, title, assignee, dueDate } = req.body as z.infer<typeof ResearchTaskCreateBody>;
-    const id = crypto.randomUUID();
-    await db.query(
-      `INSERT INTO research_tasks (id, company_id, entity_type, entity_id, title, assignee, due_date)
-       VALUES ($1, $2::uuid, $3, $4::uuid, $5, $6, $7::date)`,
-      [id, companyId, entityType, entityId, title, assignee || null, dueDate || null],
-    );
-    res.status(201).json({ data: { taskId: id, title, createdAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
+    const body = req.body as z.infer<typeof ResearchTaskCreateBody>;
+    let resolvedCompanyId = body.companyId || null;
+    let resolvedEntityType = body.linkedEntityType || 'company';
+    let resolvedEntityId = body.linkedEntityId || body.companyId || null;
 
-// ─── PATCH /research-tasks/:taskId ───
-router.patch('/research-tasks/:taskId', validateParams(TaskIdParam), validate(ResearchTaskUpdateBody), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { taskId } = req.params as z.infer<typeof TaskIdParam>;
-    const { status, assignee, title } = req.body as z.infer<typeof ResearchTaskUpdateBody>;
-    const sets: string[] = ['updated_at = NOW()'];
-    const params: unknown[] = [];
-    if (status !== undefined) { params.push(status); sets.push(`status = $${params.length}`); }
-    if (assignee !== undefined) { params.push(assignee); sets.push(`assignee = $${params.length}`); }
-    if (title !== undefined) { params.push(title); sets.push(`title = $${params.length}`); }
-    params.push(taskId);
-
-    const { rowCount } = await db.query(`UPDATE research_tasks SET ${sets.join(', ')} WHERE id::text = $${params.length}`, params);
-    if (Number(rowCount || 0) === 0) {
-      return res.status(404).json({ error: { code: 'TASK_NOT_FOUND', message: `Research task ${taskId} not found`, trace_id: traceId(req) } });
+    if (body.linkedEntityType && body.linkedEntityId) {
+      const scope = await resolveEntityScope(body.linkedEntityType, body.linkedEntityId);
+      if (!scope) {
+        return res.status(404).json({
+          error: { code: 'ENTITY_NOT_FOUND', message: `Entity ${body.linkedEntityId} could not be resolved`, trace_id: traceId(req) },
+        });
+      }
+      resolvedCompanyId = scope.companyId;
     }
-    res.json({ data: { taskId, status: status || '', updatedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+
+    if (!resolvedCompanyId || !resolvedEntityId) {
+      return res.status(400).json({
+        error: { code: 'MISSING_COMPANY_CONTEXT', message: 'linkedEntityId or companyId is required', trace_id: traceId(req) },
+      });
+    }
+
+    const created = await db.query(
+      `INSERT INTO research_tasks
+         (company_id, entity_type, entity_id, title, description, assignee, due_date, status, priority)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', 'medium')
+       RETURNING id, title, created_at`,
+      [
+        resolvedCompanyId,
+        resolvedEntityType,
+        resolvedEntityId,
+        body.title,
+        body.description || null,
+        body.assignee || null,
+        body.dueDate || null,
+      ],
+    );
+
+    res.status(201).json({
+      data: {
+        taskId: created.rows[0].id,
+        title: created.rows[0].title,
+        createdAt: created.rows[0].created_at,
+      },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /rollups ───
-router.get('/rollups', validateQuery(ConfidenceQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.patch('/research-tasks/:taskId', validateParams(TaskParams), validate(ResearchTaskPatchBody), async (req: Request, res: Response, next: NextFunction) => {
+  const client = await db.connect();
+  let started = false;
   try {
-    const { companyId } = req.query as unknown as z.infer<typeof ConfidenceQuery>;
-    const { rows } = await db.query(
-      `SELECT id, rollup_scope, scope_id, weighted_score, lowest_critical_score, assessment_count
-         FROM confidence_rollups
-        WHERE company_id::text = $1
-        ORDER BY computed_at DESC`,
-      [companyId],
+    const { taskId } = req.params as z.infer<typeof TaskParams>;
+    const existing = await client.query(
+      `SELECT id, title, status, assignee
+         FROM research_tasks
+        WHERE id::text = $1`,
+      [taskId],
     );
+
+    if (existing.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'TASK_NOT_FOUND', message: `Research task ${taskId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const body = req.body as z.infer<typeof ResearchTaskPatchBody>;
+
+    await client.query('BEGIN');
+    started = true;
+
+    const updated = await client.query(
+      `UPDATE research_tasks
+          SET title = $2,
+              status = $3,
+              assignee = $4,
+              updated_at = NOW()
+        WHERE id::text = $1
+        RETURNING id, status, updated_at`,
+      [
+        taskId,
+        body.title ?? existing.rows[0].title,
+        body.status ?? existing.rows[0].status,
+        body.assignee ?? existing.rows[0].assignee,
+      ],
+    );
+
+    if (body.notes) {
+      await client.query(
+        `INSERT INTO research_notes (research_task_id, author, content)
+         VALUES ($1, $2, $3)`,
+        [taskId, body.assignee || 'system', body.notes],
+      );
+    }
+
+    await client.query('COMMIT');
 
     res.json({
       data: {
-        rollups: rows.map((r: any) => ({
-          rollupId: r.id,
-          scope: r.rollup_scope,
-          scopeId: r.scope_id,
-          weightedScore: Number(r.weighted_score || 0),
-          lowestCriticalScore: Number(r.lowest_critical_score || 0),
-          assessmentCount: r.assessment_count || 0,
-        })),
+        taskId: updated.rows[0].id,
+        status: updated.rows[0].status,
+        updatedAt: updated.rows[0].updated_at,
       },
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (started) {
+      await client.query('ROLLBACK');
+    }
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+router.get('/rollups', validateQuery(PlanningQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId } = req.query as unknown as z.infer<typeof PlanningQuery>;
+    const stored = await db.query(
+      `SELECT id, rollup_scope, scope_id, weighted_score, lowest_critical_score, assessment_count
+         FROM confidence_rollups
+        WHERE company_id::text = $1
+        ORDER BY computed_at DESC NULLS LAST, id DESC`,
+      [companyId],
+    );
+
+    const rollups = Number(stored.rowCount || 0) > 0
+      ? stored.rows.map((row: any) => ({
+          entityType: row.rollup_scope,
+          entityId: row.scope_id,
+          aggregateConfidence: confidenceStateFromNumeric(row.weighted_score),
+          weakestLink: {
+            score: safeNumber(row.lowest_critical_score),
+          },
+          evidenceCount: safeNumber(row.assessment_count),
+        }))
+      : (await db.query(
+          `SELECT entity_type, entity_id,
+                  AVG(COALESCE(numeric_score, 0))::float8 AS avg_score,
+                  MIN(COALESCE(numeric_score, 0))::float8 AS weakest_score,
+                  SUM(COALESCE(evidence_count, 0))::int AS evidence_count
+             FROM confidence_assessments
+            WHERE company_id::text = $1
+            GROUP BY entity_type, entity_id
+            ORDER BY avg_score ASC`,
+          [companyId],
+        )).rows.map((row: any) => ({
+          entityType: row.entity_type,
+          entityId: row.entity_id,
+          aggregateConfidence: confidenceStateFromNumeric(row.avg_score),
+          weakestLink: {
+            score: safeNumber(row.weakest_score),
+          },
+          evidenceCount: safeNumber(row.evidence_count),
+        }));
+
+    res.json({
+      data: { rollups },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

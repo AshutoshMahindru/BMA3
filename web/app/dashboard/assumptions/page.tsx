@@ -518,12 +518,17 @@ export default function AssumptionsManager() {
       setBanner({ tone: 'warning', text: 'Select a company and scenario to run the compute engine.' });
       return;
     }
+    const versionId = selectedScenario?.latestVersionId;
+    if (!versionId) {
+      setBanner({ tone: 'warning', text: 'Select a scenario with an active version before running the compute engine.' });
+      return;
+    }
     setBanner(null);
     try {
       const result = await createComputeRuns({
         companyId: ctx.companyId,
         scenarioId: ctx.scenarioId,
-        versionId: selectedScenario?.latestVersionId,
+        versionId,
       });
       if (result.data) {
         setBanner({ tone: 'warning', text: `Compute run started: ${result.data.computeRunId} (status: ${result.data.status}). Check the finance screens for updated outputs.` });

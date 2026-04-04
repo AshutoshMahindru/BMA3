@@ -1,446 +1,815 @@
-import crypto from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { db } from '../../db';
 import { validate, validateParams, validateQuery } from '../../middleware/validate';
+import {
+  governanceStateFromVersion,
+  idSchema,
+  meta,
+  paginate,
+  safeNumber,
+  traceId,
+} from './_shared';
 
 const router = Router();
 
-const ID_PATTERN = /^[0-9a-fA-F-]{36}$/;
-const idSchema = z.string().regex(ID_PATTERN, 'Invalid identifier format');
-
-const GovernanceListQuery = z.object({
+const VersionsQuery = z.object({
   companyId: idSchema,
   status: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const WorkflowsQuery = z.object({
+  companyId: idSchema,
   versionId: idSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const EventsQuery = z.object({
+  companyId: idSchema,
   eventType: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const AuditQuery = z.object({
+  companyId: idSchema,
   entityType: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+});
+
+const DecisionMemoryQuery = z.object({
+  companyId: idSchema,
   family: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).optional(),
 });
 
-const WorkflowIdParam = z.object({ workflowId: idSchema });
-const VersionIdParam = z.object({ versionId: idSchema });
-const DecisionRecordIdParam = z.object({ decisionRecordId: idSchema });
-
-const SubmitBody = z.object({
-  versionId: idSchema,
-  submitter: z.string().optional(),
-  comment: z.string().optional(),
+const WorkflowActionBody = z.object({
+  reason: z.string().trim().min(1),
+  notes: z.string().optional(),
+  suggestedActions: z.array(z.string()).optional(),
 });
 
-const ApproveBody = z.object({
-  approver: z.string().trim().min(1),
-  comment: z.string().optional(),
+const DecisionMemoryBody = z.object({
+  title: z.string().trim().min(1),
+  family: z.string().trim().min(1),
+  rationale: z.string().optional(),
+  owner: z.string().optional(),
+  decisionDate: z.string().trim().min(1),
+  linkedVersionId: idSchema.optional(),
+  linkedDecisionId: idSchema.optional(),
+  companyId: idSchema.optional(),
+  scenarioId: idSchema.optional(),
 });
 
-const RejectBody = z.object({
-  reviewer: z.string().trim().min(1),
+const PublicationBody = z.object({
   reason: z.string().trim().min(1),
 });
 
-const PublishBody = z.object({
-  actor: z.string().optional(),
-  comment: z.string().optional(),
-});
+const WorkflowParams = z.object({ workflowId: idSchema });
+const DecisionRecordParams = z.object({ decisionRecordId: idSchema });
+const VersionParams = z.object({ versionId: idSchema });
 
-const UnpublishBody = z.object({
-  actor: z.string().optional(),
-  reason: z.string().optional(),
-});
-
-const DecisionMemoryCreateBody = z.object({
-  companyId: idSchema,
-  title: z.string().trim().min(1).max(300),
-  family: z.string().optional(),
-  owner: z.string().optional(),
-  linkedVersionId: idSchema.optional(),
-  rationale: z.string().optional(),
-  outcome: z.string().optional(),
-  lessons: z.string().optional(),
-});
-
-function traceId(req: Request): string {
-  return (req.headers['x-trace-id'] as string) || 'no-trace-id';
+async function resolveCompanyTenant(companyId: string): Promise<string | null> {
+  const company = await db.query(
+    `SELECT tenant_id
+       FROM companies
+      WHERE id::text = $1
+        AND is_deleted = FALSE`,
+    [companyId],
+  );
+  return company.rowCount ? String(company.rows[0].tenant_id) : null;
 }
 
-function meta(extra?: Record<string, unknown>) {
-  return {
-    freshness: { source: 'database', timestamp: new Date().toISOString() },
-    ...(extra || {}),
-  };
+async function logGovernanceEvent(companyId: string, versionId: string | null, eventType: string, reason: string, metadataValue?: Record<string, unknown>) {
+  const tenantId = await resolveCompanyTenant(companyId);
+  if (!tenantId) return;
+
+  await db.query(
+    `INSERT INTO governance_events
+       (tenant_id, plan_version_id, event_type, details, company_id, version_id, actor_id, occurred_at, metadata)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, 'system', NOW(), $7::jsonb)`,
+    [
+      tenantId,
+      versionId,
+      eventType,
+      JSON.stringify({ reason, ...(metadataValue || {}) }),
+      companyId,
+      versionId,
+      JSON.stringify({ reason, ...(metadataValue || {}) }),
+    ],
+  );
 }
 
-// ─── GET /versions ───
-router.get('/versions', validateQuery(GovernanceListQuery), async (req: Request, res: Response, next: NextFunction) => {
+async function resolveWorkflow(workflowId: string) {
+  const result = await db.query(
+    `SELECT id,
+            COALESCE(company_id, pv.company_id) AS company_id,
+            COALESCE(version_id, plan_version_id) AS version_id,
+            COALESCE(status::text, approval_status::text, 'draft') AS workflow_status,
+            workflow_type,
+            approval_status,
+            approver_id,
+            approval_step,
+            comments
+       FROM approval_workflows aw
+       LEFT JOIN plan_versions pv
+         ON pv.id = COALESCE(aw.version_id, aw.plan_version_id)
+      WHERE aw.id::text = $1`,
+    [workflowId],
+  );
+  return result.rowCount ? result.rows[0] : null;
+}
+
+router.get('/versions', validateQuery(VersionsQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, status, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof GovernanceListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = `pv.scenario_id IN (SELECT id FROM scenarios WHERE company_id::text = $1 AND is_deleted = FALSE)`;
+    const { companyId, status } = req.query as unknown as z.infer<typeof VersionsQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
+
     if (status) {
-      where += ` AND pv.governance_state::text = $${params.length + 1}`;
+      clauses += ` AND (
+        pv.status::text = $${idx}
+        OR (pv.is_frozen = TRUE AND $${idx} = 'frozen')
+        OR (pv.published_at IS NOT NULL AND $${idx} = 'published')
+      )`;
       params.push(status);
+      idx += 1;
     }
 
+    params.push(limit, offset);
+
     const { rows } = await db.query(
-      `SELECT pv.id, pv.label, pv.scenario_id, pv.governance_state::text,
-              pv.created_at,
-              pe_pub.occurred_at AS published_at,
-              pe_appr.acted_at AS approved_at
+      `SELECT pv.id, COALESCE(pv.version_label, pv.name) AS label, pv.scenario_id,
+              pv.status::text AS status, pv.is_frozen, pv.frozen_at, pv.published_at,
+              (
+                SELECT MAX(actioned_at)
+                  FROM approval_workflows aw
+                 WHERE COALESCE(aw.version_id, aw.plan_version_id)::text = pv.id::text
+                   AND COALESCE(aw.approval_status::text, aw.status::text) = 'approved'
+              ) AS approved_at
          FROM plan_versions pv
-         LEFT JOIN LATERAL (
-           SELECT occurred_at FROM publication_events pe
-           WHERE pe.version_id = pv.id AND pe.action = 'publish'
-           ORDER BY pe.occurred_at DESC LIMIT 1
-         ) pe_pub ON TRUE
-         LEFT JOIN LATERAL (
-           SELECT acted_at FROM approval_workflow_steps aws
-           WHERE aws.workflow_id IN (
-             SELECT id FROM approval_workflows aw WHERE aw.plan_version_id = pv.id
-           ) AND aws.action = 'approve'
-           ORDER BY aws.acted_at DESC LIMIT 1
-         ) pe_appr ON TRUE
-        WHERE ${where}
+        WHERE pv.company_id::text = $1
+          AND pv.is_deleted = FALSE
+          ${clauses}
         ORDER BY pv.created_at DESC
-        LIMIT $2 OFFSET $3`,
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        versionId: r.id,
-        label: r.label || '',
-        scenarioId: r.scenario_id,
-        governanceState: r.governance_state,
-        approvedAt: r.approved_at || null,
-        publishedAt: r.published_at || null,
+      data: rows.map((row: any) => ({
+        versionId: row.id,
+        label: row.label,
+        scenarioId: row.scenario_id,
+        governanceState: governanceStateFromVersion(row),
+        approvedAt: row.approved_at,
+        publishedAt: row.published_at,
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /approval-workflows ───
-router.get('/approval-workflows', validateQuery(GovernanceListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/approval-workflows', validateQuery(WorkflowsQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, versionId, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof GovernanceListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = `aw.tenant_id IN (SELECT tenant_id FROM companies WHERE id::text IN (SELECT company_id::text FROM scenarios WHERE company_id::text = $1))`;
+    const { companyId, versionId } = req.query as unknown as z.infer<typeof WorkflowsQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
 
     if (versionId) {
-      where += ` AND aw.plan_version_id::text = $${params.length + 1}`;
+      clauses += ` AND COALESCE(aw.version_id, aw.plan_version_id)::text = $${idx++}`;
       params.push(versionId);
     }
 
-    const { rows } = await db.query(
-      `SELECT aw.id, aw.plan_version_id, aw.status::text, aw.created_at
+    params.push(limit, offset);
+
+    const workflows = await db.query(
+      `SELECT aw.id,
+              COALESCE(aw.version_id, aw.plan_version_id) AS version_id,
+              COALESCE(aw.status::text, aw.approval_status::text, 'draft') AS status,
+              aw.created_at AS submitted_at,
+              aw.workflow_type,
+              aw.approver_id,
+              aw.approval_step,
+              aw.comments,
+              aw.actioned_at
          FROM approval_workflows aw
-        WHERE ${where}
+         LEFT JOIN plan_versions pv
+           ON pv.id = COALESCE(aw.version_id, aw.plan_version_id)
+        WHERE COALESCE(aw.company_id, pv.company_id)::text = $1
+          ${clauses}
         ORDER BY aw.created_at DESC
-        LIMIT $2 OFFSET $3`,
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
-    const workflows = [];
-    for (const row of rows as Array<{ id: string; plan_version_id: string; status: string; created_at: string }>) {
-      const steps = await db.query(
-        `SELECT step_order, approver, action, acted_at, comment
+    const data = [];
+    for (const workflow of workflows.rows as Array<any>) {
+      const stepRows = await db.query(
+        `SELECT id, step_order, approver, action, acted_at, comment
            FROM approval_workflow_steps
           WHERE workflow_id::text = $1
-          ORDER BY step_order ASC`,
-        [row.id],
+          ORDER BY step_order ASC, created_at ASC`,
+        [workflow.id],
       );
-      workflows.push({
-        workflowId: row.id,
-        versionId: row.plan_version_id,
-        status: row.status,
-        submittedAt: row.created_at,
-        steps: steps.rows.map((s: any) => ({
-          stepOrder: s.step_order,
-          approver: s.approver,
-          action: s.action,
-          actedAt: s.acted_at,
-          comment: s.comment,
-        })),
+
+      const steps = Number(stepRows.rowCount || 0) > 0
+        ? stepRows.rows.map((row: any) => ({
+            stepOrder: row.step_order,
+            stepName: `Step ${row.step_order}`,
+            requiredRole: row.approver || 'reviewer',
+            status: row.action || 'pending',
+            actedAt: row.acted_at,
+            comment: row.comment,
+          }))
+        : [{
+            stepOrder: workflow.approval_step || 1,
+            stepName: workflow.workflow_type || 'Approval',
+            requiredRole: workflow.approver_id ? String(workflow.approver_id) : 'reviewer',
+            status: workflow.status,
+            actedAt: workflow.actioned_at,
+            comment: workflow.comments,
+          }];
+
+      data.push({
+        workflowId: workflow.id,
+        versionId: workflow.version_id,
+        status: workflow.status,
+        submittedAt: workflow.submitted_at,
+        steps,
       });
     }
 
-    res.json({ data: workflows, meta: meta({ companyId }) });
-  } catch (error) { next(error); }
+    res.json({ data, meta: meta() });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /approval-workflows/:workflowId/submit ───
-router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowIdParam), validate(SubmitBody), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/approval-workflows/:workflowId/submit', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { workflowId } = req.params as z.infer<typeof WorkflowIdParam>;
-    const { submitter, comment } = req.body as z.infer<typeof SubmitBody>;
+    const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
+    const workflow = await resolveWorkflow(workflowId);
+
+    if (!workflow) {
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const { reason, notes } = req.body as z.infer<typeof WorkflowActionBody>;
 
     await db.query(
-      `UPDATE approval_workflows SET status = 'submitted', updated_at = NOW() WHERE id::text = $1`,
-      [workflowId],
+      `UPDATE approval_workflows
+          SET approval_status = 'pending',
+              comments = $2,
+              actioned_at = NULL,
+              completed_at = NULL,
+              workflow_type = COALESCE(workflow_type, 'review'),
+              status = 'submitted'
+        WHERE id::text = $1`,
+      [workflowId, notes || reason],
     );
 
     await db.query(
-      `INSERT INTO approval_workflow_steps (id, workflow_id, step_order, approver, action, comment, acted_at)
-       VALUES ($1, $2::uuid, 0, $3, 'submit', $4, NOW())`,
-      [crypto.randomUUID(), workflowId, submitter || 'system', comment || null],
+      `UPDATE plan_versions
+          SET status = 'in_review',
+              updated_at = NOW()
+        WHERE id::text = $1`,
+      [workflow.version_id],
     );
-
-    res.json({ data: { workflowId, status: 'submitted', submittedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
-
-// ─── POST /approval-workflows/:workflowId/approve ───
-router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowIdParam), validate(ApproveBody), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { workflowId } = req.params as z.infer<typeof WorkflowIdParam>;
-    const { approver, comment } = req.body as z.infer<typeof ApproveBody>;
-
-    await db.query(`UPDATE approval_workflows SET status = 'approved', updated_at = NOW() WHERE id::text = $1`, [workflowId]);
-
-    const maxStep = await db.query(`SELECT COALESCE(MAX(step_order), 0)::int AS max_step FROM approval_workflow_steps WHERE workflow_id::text = $1`, [workflowId]);
-    const nextStep = (maxStep.rows[0]?.max_step || 0) + 1;
 
     await db.query(
-      `INSERT INTO approval_workflow_steps (id, workflow_id, step_order, approver, action, comment, acted_at)
-       VALUES ($1, $2::uuid, $3, $4, 'approve', $5, NOW())`,
-      [crypto.randomUUID(), workflowId, nextStep, approver, comment || null],
+      `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
+       VALUES ($1, 1, 'reviewer', 'submit', NOW(), $2)`,
+      [workflowId, reason],
     );
 
-    res.json({ data: { workflowId, status: 'approved', approvedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+    await logGovernanceEvent(workflow.company_id, workflow.version_id, 'submit', reason, { workflowId });
+
+    res.json({
+      data: {
+        workflowId,
+        status: 'submitted',
+        submittedAt: new Date().toISOString(),
+      },
+      meta: meta({ governanceState: 'under_review' }),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /approval-workflows/:workflowId/reject ───
-router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowIdParam), validate(RejectBody), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/approval-workflows/:workflowId/approve', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { workflowId } = req.params as z.infer<typeof WorkflowIdParam>;
-    const { reviewer, reason } = req.body as z.infer<typeof RejectBody>;
+    const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
+    const workflow = await resolveWorkflow(workflowId);
 
-    await db.query(`UPDATE approval_workflows SET status = 'rejected', updated_at = NOW() WHERE id::text = $1`, [workflowId]);
+    if (!workflow) {
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
 
-    const maxStep = await db.query(`SELECT COALESCE(MAX(step_order), 0)::int AS max_step FROM approval_workflow_steps WHERE workflow_id::text = $1`, [workflowId]);
-    const nextStep = (maxStep.rows[0]?.max_step || 0) + 1;
+    const { reason } = req.body as z.infer<typeof WorkflowActionBody>;
 
     await db.query(
-      `INSERT INTO approval_workflow_steps (id, workflow_id, step_order, approver, action, comment, acted_at)
-       VALUES ($1, $2::uuid, $3, $4, 'reject', $5, NOW())`,
-      [crypto.randomUUID(), workflowId, nextStep, reviewer, reason],
+      `UPDATE approval_workflows
+          SET approval_status = 'approved',
+              comments = $2,
+              actioned_at = NOW(),
+              completed_at = NOW(),
+              status = 'approved'
+        WHERE id::text = $1`,
+      [workflowId, reason],
     );
 
-    res.json({ data: { workflowId, status: 'rejected', rejectedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+    await db.query(
+      `UPDATE plan_versions
+          SET status = 'approved',
+              updated_at = NOW()
+        WHERE id::text = $1`,
+      [workflow.version_id],
+    );
+
+    await db.query(
+      `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
+       VALUES ($1, COALESCE($2, 1), 'approver', 'approve', NOW(), $3)`,
+      [workflowId, workflow.approval_step, reason],
+    );
+
+    await logGovernanceEvent(workflow.company_id, workflow.version_id, 'approve', reason, { workflowId });
+
+    res.json({
+      data: {
+        workflowId,
+        status: 'approved',
+        approvedAt: new Date().toISOString(),
+      },
+      meta: meta({ governanceState: 'approved' }),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /events ───
-router.get('/events', validateQuery(GovernanceListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/approval-workflows/:workflowId/reject', validateParams(WorkflowParams), validate(WorkflowActionBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, eventType, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof GovernanceListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = `(ge.company_id::text = $1 OR ge.tenant_id IN (SELECT tenant_id FROM companies WHERE id::text = $1))`;
+    const { workflowId } = req.params as z.infer<typeof WorkflowParams>;
+    const workflow = await resolveWorkflow(workflowId);
+
+    if (!workflow) {
+      return res.status(404).json({
+        error: { code: 'WORKFLOW_NOT_FOUND', message: `Workflow ${workflowId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const { reason, suggestedActions } = req.body as z.infer<typeof WorkflowActionBody>;
+    const comment = suggestedActions && suggestedActions.length > 0
+      ? `${reason}\nSuggested actions: ${suggestedActions.join(', ')}`
+      : reason;
+
+    await db.query(
+      `UPDATE approval_workflows
+          SET approval_status = 'rejected',
+              comments = $2,
+              actioned_at = NOW(),
+              completed_at = NOW(),
+              status = 'rejected'
+        WHERE id::text = $1`,
+      [workflowId, comment],
+    );
+
+    await db.query(
+      `UPDATE plan_versions
+          SET status = 'archived',
+              updated_at = NOW()
+        WHERE id::text = $1`,
+      [workflow.version_id],
+    );
+
+    await db.query(
+      `INSERT INTO approval_workflow_steps (workflow_id, step_order, approver, action, acted_at, comment)
+       VALUES ($1, COALESCE($2, 1), 'approver', 'reject', NOW(), $3)`,
+      [workflowId, workflow.approval_step, comment],
+    );
+
+    await logGovernanceEvent(workflow.company_id, workflow.version_id, 'reject', reason, { workflowId, suggestedActions: suggestedActions || [] });
+
+    res.json({
+      data: {
+        workflowId,
+        status: 'rejected',
+        rejectedAt: new Date().toISOString(),
+      },
+      meta: meta({ governanceState: 'rejected' }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/events', validateQuery(EventsQuery), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { companyId, eventType } = req.query as unknown as z.infer<typeof EventsQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
+
     if (eventType) {
-      where += ` AND ge.event_type::text = $${params.length + 1}`;
+      clauses += ` AND event_type = $${idx++}`;
       params.push(eventType);
     }
 
+    params.push(limit, offset);
+
     const { rows } = await db.query(
-      `SELECT ge.id, ge.event_type::text, COALESCE(ge.actor_id, ge.user_id::text, '') AS actor,
-              ge.version_id, ge.plan_version_id, ge.occurred_at, ge.created_at,
-              COALESCE(ge.metadata, ge.details) AS details
-         FROM governance_events ge
-        WHERE ${where}
-        ORDER BY COALESCE(ge.occurred_at, ge.created_at) DESC
-        LIMIT $2 OFFSET $3`,
+      `SELECT id, event_type, COALESCE(entity_type, 'version') AS entity_type,
+              COALESCE(entity_id, version_id, plan_version_id) AS entity_id,
+              COALESCE(actor_id, actor_role, user_id::text, 'system') AS actor,
+              COALESCE(event_timestamp, occurred_at, created_at) AS ts,
+              COALESCE(metadata, details, '{}'::jsonb) AS details
+         FROM governance_events
+        WHERE company_id::text = $1
+          ${clauses}
+        ORDER BY COALESCE(event_timestamp, occurred_at, created_at) DESC
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        eventId: r.id,
-        eventType: r.event_type,
-        entityType: 'version',
-        entityId: r.version_id || r.plan_version_id || '',
-        actor: r.actor,
-        timestamp: r.occurred_at || r.created_at,
-        details: r.details || {},
+      data: rows.map((row: any) => ({
+        eventId: row.id,
+        eventType: row.event_type,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        actor: row.actor,
+        timestamp: row.ts,
+        details: row.details || {},
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /audit-log ───
-router.get('/audit-log', validateQuery(GovernanceListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/audit-log', validateQuery(AuditQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, entityType, startDate, endDate, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof GovernanceListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = `(ge.company_id::text = $1 OR ge.tenant_id IN (SELECT tenant_id FROM companies WHERE id::text = $1))`;
+    const { companyId, entityType, startDate, endDate } = req.query as unknown as z.infer<typeof AuditQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
+
     if (entityType) {
-      where += ` AND ge.event_type::text ILIKE '%' || $${params.length + 1} || '%'`;
+      clauses += ` AND COALESCE(entity_type, 'version') = $${idx++}`;
       params.push(entityType);
     }
     if (startDate) {
-      where += ` AND COALESCE(ge.occurred_at, ge.created_at) >= $${params.length + 1}::timestamptz`;
+      clauses += ` AND COALESCE(event_timestamp, occurred_at, created_at) >= $${idx++}`;
       params.push(startDate);
     }
     if (endDate) {
-      where += ` AND COALESCE(ge.occurred_at, ge.created_at) <= $${params.length + 1}::timestamptz`;
+      clauses += ` AND COALESCE(event_timestamp, occurred_at, created_at) <= $${idx++}`;
       params.push(endDate);
     }
 
+    params.push(limit, offset);
+
     const { rows } = await db.query(
-      `SELECT ge.id, ge.event_type::text AS action, COALESCE(ge.actor_id, ge.user_id::text, '') AS actor,
-              'version' AS entity_type, COALESCE(ge.version_id, ge.plan_version_id)::text AS entity_id,
-              COALESCE(ge.occurred_at, ge.created_at) AS ts,
-              COALESCE(ge.metadata, ge.details) AS change_details
-         FROM governance_events ge
-        WHERE ${where}
-        ORDER BY COALESCE(ge.occurred_at, ge.created_at) DESC
-        LIMIT $2 OFFSET $3`,
+      `SELECT id, event_type, COALESCE(actor_id, actor_role, user_id::text, 'system') AS actor,
+              COALESCE(entity_type, 'version') AS entity_type,
+              COALESCE(entity_id, version_id, plan_version_id) AS entity_id,
+              COALESCE(event_timestamp, occurred_at, created_at) AS ts,
+              COALESCE(metadata, details, '{}'::jsonb) AS details
+         FROM governance_events
+        WHERE company_id::text = $1
+          ${clauses}
+        ORDER BY COALESCE(event_timestamp, occurred_at, created_at) DESC
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        logId: r.id,
-        action: r.action,
-        actor: r.actor,
-        entityType: r.entity_type,
-        entityId: r.entity_id || '',
-        timestamp: r.ts,
-        changeDetails: r.change_details || {},
+      data: rows.map((row: any) => ({
+        logId: row.id,
+        action: row.event_type,
+        actor: row.actor,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        timestamp: row.ts,
+        changeDetails: row.details || {},
         surfaceContext: 'governance',
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── GET /decision-memory ───
-router.get('/decision-memory', validateQuery(GovernanceListQuery), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/decision-memory', validateQuery(DecisionMemoryQuery), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, family, limit = 50, offset = 0 } = req.query as unknown as z.infer<typeof GovernanceListQuery>;
-    const params: unknown[] = [companyId, limit, offset];
-    let where = `dr.company_id::text = $1 AND dr.is_deleted = FALSE`;
+    const { companyId, family } = req.query as unknown as z.infer<typeof DecisionMemoryQuery>;
+    const { limit, offset } = paginate(req.query);
+    const params: any[] = [companyId];
+    let idx = 2;
+    let clauses = '';
+
     if (family) {
-      where += ` AND dr.family::text = $${params.length + 1}`;
+      clauses += ` AND COALESCE(dr.family::text, dr.decision_type) = $${idx++}`;
       params.push(family);
     }
 
+    params.push(limit, offset);
+
     const { rows } = await db.query(
-      `SELECT dr.id, COALESCE(dr.title, dr.decision_title) AS title,
-              dr.family::text, COALESCE(dr.owner_user_id, '') AS owner,
-              dr.created_at AS decision_date,
-              dr.version_id AS linked_version_id,
-              COALESCE(dr.rationale_summary, '') AS outcome
+      `SELECT dr.id,
+              COALESCE(dr.title, dr.decision_title) AS title,
+              COALESCE(dr.family::text, dr.decision_type) AS family,
+              COALESCE(dr.owner_user_id, dr.decided_by::text, 'system') AS owner,
+              COALESCE(dr.decided_at::date, dr.created_at::date) AS decision_date,
+              COALESCE(dr.version_id, dr.plan_version_id) AS linked_version_id,
+              COALESCE(do.outcome_summary, 'Pending outcome capture') AS outcome
          FROM decision_records dr
-        WHERE ${where}
-        ORDER BY dr.created_at DESC
-        LIMIT $2 OFFSET $3`,
+         LEFT JOIN plan_versions pv
+           ON pv.id = COALESCE(dr.version_id, dr.plan_version_id)
+         LEFT JOIN LATERAL (
+           SELECT outcome_summary
+             FROM decision_outcomes dout
+            WHERE COALESCE(dout.decision_id, dout.decision_record_id)::text = dr.id::text
+            ORDER BY COALESCE(dout.recorded_at, dout.review_date::timestamptz, dout.created_at) DESC
+            LIMIT 1
+         ) do ON TRUE
+        WHERE COALESCE(dr.company_id::text, pv.company_id::text) = $1
+          AND COALESCE(dr.is_deleted, FALSE) = FALSE
+          ${clauses}
+        ORDER BY COALESCE(dr.decided_at, dr.created_at) DESC
+        LIMIT $${idx++} OFFSET $${idx++}`,
       params,
     );
 
     res.json({
-      data: rows.map((r: any) => ({
-        decisionRecordId: r.id,
-        title: r.title || 'Untitled',
-        family: r.family || '',
-        owner: r.owner,
-        decisionDate: r.decision_date,
-        linkedVersionId: r.linked_version_id || '',
-        outcome: r.outcome,
+      data: rows.map((row: any) => ({
+        decisionRecordId: row.id,
+        title: row.title,
+        family: row.family,
+        owner: row.owner,
+        decisionDate: row.decision_date,
+        linkedVersionId: row.linked_version_id,
+        outcome: row.outcome,
       })),
-      meta: meta({ companyId }),
+      meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /decision-memory ───
-router.post('/decision-memory', validate(DecisionMemoryCreateBody), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/decision-memory', validate(DecisionMemoryBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { companyId, title, family, owner, linkedVersionId, rationale, outcome, lessons } = req.body as z.infer<typeof DecisionMemoryCreateBody>;
-    const id = crypto.randomUUID();
+    const body = req.body as z.infer<typeof DecisionMemoryBody>;
+    let companyId = body.companyId || null;
+    let scenarioId = body.scenarioId || null;
+    let versionId = body.linkedVersionId || null;
 
-    await db.query(
-      `INSERT INTO decision_records (id, company_id, version_id, family, title, owner_user_id, rationale_summary, metadata, status)
-       VALUES ($1, $2::uuid, $3::uuid, $4::decision_family, $5, $6, $7, $8::jsonb, 'active')`,
-      [id, companyId, linkedVersionId || null, family || null, title, owner || null, rationale || null, JSON.stringify({ outcome: outcome || '', lessons: lessons || '' })],
-    );
-
-    res.status(201).json({ data: { decisionRecordId: id, title, createdAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
-});
-
-// ─── GET /decision-memory/:decisionRecordId ───
-router.get('/decision-memory/:decisionRecordId', validateParams(DecisionRecordIdParam), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { decisionRecordId } = req.params as z.infer<typeof DecisionRecordIdParam>;
-    const { rows } = await db.query(
-      `SELECT dr.id, COALESCE(dr.title, dr.decision_title) AS title, dr.family::text,
-              COALESCE(dr.rationale_summary, '') AS rationale,
-              COALESCE(dr.owner_user_id, '') AS owner,
-              dr.created_at AS decision_date,
-              dr.version_id AS linked_version_id,
-              dr.metadata
-         FROM decision_records dr
-        WHERE dr.id::text = $1 AND dr.is_deleted = FALSE`,
-      [decisionRecordId],
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ error: { code: 'DECISION_RECORD_NOT_FOUND', message: `Decision record ${decisionRecordId} not found`, trace_id: traceId(req) } });
+    if (versionId) {
+      const version = await db.query(
+        `SELECT company_id, scenario_id
+           FROM plan_versions
+          WHERE id::text = $1
+            AND is_deleted = FALSE`,
+        [versionId],
+      );
+      if (version.rowCount === 0) {
+        return res.status(404).json({
+          error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
+        });
+      }
+      companyId = companyId || version.rows[0].company_id;
+      scenarioId = scenarioId || version.rows[0].scenario_id;
     }
-    const r = rows[0];
-    const md = (r.metadata || {}) as Record<string, unknown>;
-    res.json({
+
+    if (!companyId) {
+      return res.status(400).json({
+        error: { code: 'MISSING_COMPANY_CONTEXT', message: 'linkedVersionId or companyId is required', trace_id: traceId(req) },
+      });
+    }
+
+    const tenantId = await resolveCompanyTenant(companyId);
+    if (!tenantId) {
+      return res.status(404).json({
+        error: { code: 'COMPANY_NOT_FOUND', message: `Company ${companyId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const created = await db.query(
+      `INSERT INTO decision_records
+         (tenant_id, plan_version_id, decision_title, decision_type, decision_context, rationale, decided_at, company_id, scenario_id, version_id, family, status, title, rationale_summary, owner_user_id, metadata, updated_at)
+       VALUES ($1, $2, $3, $4, NULL, $5, $6::date, $7, $8, $9, $10, 'draft', $3, $5, $11, $12::jsonb, NOW())
+       RETURNING id, created_at`,
+      [
+        tenantId,
+        versionId,
+        body.title,
+        body.family,
+        body.rationale || null,
+        body.decisionDate,
+        companyId,
+        scenarioId,
+        versionId,
+        body.family,
+        body.owner || null,
+        JSON.stringify({ linkedDecisionId: body.linkedDecisionId || null }),
+      ],
+    );
+
+    if (body.linkedDecisionId) {
+      await db.query(
+        `INSERT INTO decision_outcomes
+           (tenant_id, decision_record_id, review_date, outcome_summary, created_at)
+         VALUES ($1, $2, $3::date, 'Linked to prior decision context', NOW())`,
+        [tenantId, body.linkedDecisionId, body.decisionDate],
+      ).catch(() => undefined);
+    }
+
+    res.status(201).json({
       data: {
-        decisionRecordId: r.id,
-        title: r.title || 'Untitled',
-        family: r.family || '',
-        rationale: r.rationale,
-        owner: r.owner,
-        decisionDate: r.decision_date,
-        linkedVersionId: r.linked_version_id || '',
-        outcome: String(md.outcome || ''),
-        lessons: String(md.lessons || ''),
+        decisionRecordId: created.rows[0].id,
+        title: body.title,
+        createdAt: created.rows[0].created_at,
       },
       meta: meta(),
     });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /publication/:versionId/publish ───
-router.post('/publication/:versionId/publish', validateParams(VersionIdParam), validate(PublishBody), async (req: Request, res: Response, next: NextFunction) => {
+router.get('/decision-memory/:decisionRecordId', validateParams(DecisionRecordParams), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { versionId } = req.params as z.infer<typeof VersionIdParam>;
-    const { actor } = req.body as z.infer<typeof PublishBody>;
-
-    await db.query(`UPDATE plan_versions SET governance_state = 'published', updated_at = NOW() WHERE id::text = $1`, [versionId]);
-    await db.query(
-      `INSERT INTO publication_events (id, version_id, action, actor_id) VALUES ($1, $2::uuid, 'publish', $3)`,
-      [crypto.randomUUID(), versionId, actor || 'system'],
+    const { decisionRecordId } = req.params as z.infer<typeof DecisionRecordParams>;
+    const result = await db.query(
+      `SELECT dr.id,
+              COALESCE(dr.title, dr.decision_title) AS title,
+              COALESCE(dr.family::text, dr.decision_type) AS family,
+              COALESCE(dr.rationale_summary, dr.rationale, '') AS rationale,
+              COALESCE(dr.owner_user_id, dr.decided_by::text, 'system') AS owner,
+              COALESCE(dr.decided_at::date, dr.created_at::date) AS decision_date,
+              COALESCE(dr.version_id, dr.plan_version_id) AS linked_version_id,
+              COALESCE(do.outcome_summary, 'Pending outcome capture') AS outcome,
+              COALESCE(do.lesson_learned, '') AS lessons
+         FROM decision_records dr
+         LEFT JOIN LATERAL (
+           SELECT outcome_summary, lesson_learned
+             FROM decision_outcomes dout
+            WHERE COALESCE(dout.decision_id, dout.decision_record_id)::text = dr.id::text
+            ORDER BY COALESCE(dout.recorded_at, dout.review_date::timestamptz, dout.created_at) DESC
+            LIMIT 1
+         ) do ON TRUE
+        WHERE dr.id::text = $1
+          AND COALESCE(dr.is_deleted, FALSE) = FALSE`,
+      [decisionRecordId],
     );
 
-    res.json({ data: { versionId, governanceState: 'published', publishedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'DECISION_RECORD_NOT_FOUND', message: `Decision record ${decisionRecordId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    const row = result.rows[0] as any;
+    res.json({
+      data: {
+        decisionRecordId: row.id,
+        title: row.title,
+        family: row.family,
+        rationale: row.rationale,
+        owner: row.owner,
+        decisionDate: row.decision_date,
+        linkedVersionId: row.linked_version_id,
+        outcome: row.outcome,
+        lessons: row.lessons,
+      },
+      meta: meta(),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-// ─── POST /publication/:versionId/unpublish ───
-router.post('/publication/:versionId/unpublish', validateParams(VersionIdParam), validate(UnpublishBody), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/publication/:versionId/publish', validateParams(VersionParams), validate(PublicationBody), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { versionId } = req.params as z.infer<typeof VersionIdParam>;
-    const { actor } = req.body as z.infer<typeof UnpublishBody>;
-
-    await db.query(`UPDATE plan_versions SET governance_state = 'draft', updated_at = NOW() WHERE id::text = $1`, [versionId]);
-    await db.query(
-      `INSERT INTO publication_events (id, version_id, action, actor_id) VALUES ($1, $2::uuid, 'unpublish', $3)`,
-      [crypto.randomUUID(), versionId, actor || 'system'],
+    const { versionId } = req.params as z.infer<typeof VersionParams>;
+    const { reason } = req.body as z.infer<typeof PublicationBody>;
+    const version = await db.query(
+      `SELECT company_id
+         FROM plan_versions
+        WHERE id::text = $1
+          AND is_deleted = FALSE`,
+      [versionId],
     );
 
-    res.json({ data: { versionId, governanceState: 'draft', unpublishedAt: new Date().toISOString() }, meta: meta() });
-  } catch (error) { next(error); }
+    if (version.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await db.query(
+      `UPDATE plan_versions
+          SET status = 'published',
+              is_frozen = TRUE,
+              frozen_at = COALESCE(frozen_at, NOW()),
+              published_at = NOW(),
+              updated_at = NOW()
+        WHERE id::text = $1`,
+      [versionId],
+    );
+
+    await db.query(
+      `INSERT INTO publication_events (version_id, action, actor_id, occurred_at)
+       VALUES ($1, 'publish', 'system', NOW())`,
+      [versionId],
+    );
+
+    await logGovernanceEvent(version.rows[0].company_id, versionId, 'publish', reason);
+
+    res.json({
+      data: {
+        versionId,
+        governanceState: 'published',
+        publishedAt: new Date().toISOString(),
+      },
+      meta: meta({ governanceState: 'published' }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/publication/:versionId/unpublish', validateParams(VersionParams), validate(PublicationBody), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { versionId } = req.params as z.infer<typeof VersionParams>;
+    const { reason } = req.body as z.infer<typeof PublicationBody>;
+    const version = await db.query(
+      `SELECT company_id
+         FROM plan_versions
+        WHERE id::text = $1
+          AND is_deleted = FALSE`,
+      [versionId],
+    );
+
+    if (version.rowCount === 0) {
+      return res.status(404).json({
+        error: { code: 'VERSION_NOT_FOUND', message: `Version ${versionId} not found`, trace_id: traceId(req) },
+      });
+    }
+
+    await db.query(
+      `UPDATE plan_versions
+          SET status = 'approved',
+              is_frozen = FALSE,
+              published_at = NULL,
+              updated_at = NOW()
+        WHERE id::text = $1`,
+      [versionId],
+    );
+
+    await db.query(
+      `INSERT INTO publication_events (version_id, action, actor_id, occurred_at)
+       VALUES ($1, 'unpublish', 'system', NOW())`,
+      [versionId],
+    );
+
+    await logGovernanceEvent(version.rows[0].company_id, versionId, 'unpublish', reason);
+
+    res.json({
+      data: {
+        versionId,
+        governanceState: 'approved',
+        unpublishedAt: new Date().toISOString(),
+      },
+      meta: meta({ governanceState: 'approved' }),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;
